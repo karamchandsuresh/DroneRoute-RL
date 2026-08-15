@@ -1,59 +1,58 @@
 from environment.drone_env import DroneEnvironment
+from agent.q_learning import QLearningAgent
 
 
 def main():
+    print("=== DroneRoute RL - Q-Learning Test ===")
+
+    # Create environment
     env = DroneEnvironment()
 
-    print("=== DroneRoute RL Environment Test ===")
+    # Create Q-Learning agent
+    agent = QLearningAgent(
+        grid_size=env.grid_size
+    )
 
-    # -----------------------------
-    # Test 1: Normal movement
-    # -----------------------------
-    env.reset()
+    print("\nQ-table shape:")
+    print(agent.q_table.shape)
 
-    state, reward, done = env.step(3)  # RIGHT
+    print("\nInitial Q-values at state (0, 0):")
+    print(agent.q_table[0, 0])
 
-    print("\nTest 1 - Normal Movement")
-    print("State:", state)
+    # Reset environment
+    state = env.reset()
+
+    # Agent chooses an action
+    action = agent.choose_action(state)
+
+    print("\nCurrent state:", state)
+    print("Chosen action:", action)
+
+    # Environment executes the action
+    next_state, reward, done = env.step(action)
+
+    print("Next state:", next_state)
     print("Reward:", reward)
     print("Done:", done)
 
-    # -----------------------------
-    # Test 2: Obstacle collision
-    # -----------------------------
-    state, reward, done = env.step(1)  # DOWN into (1,1)
+    # Update Q-value
+    agent.update_q_value(
+        state,
+        action,
+        reward,
+        next_state,
+        done
+    )
 
-    print("\nTest 2 - Obstacle Collision")
-    print("State:", state)
-    print("Reward:", reward)
-    print("Done:", done)
+    print("\nUpdated Q-values at state (0, 0):")
+    print(agent.q_table[0, 0])
 
-    # -----------------------------
-    # Test 3: Boundary collision
-    # -----------------------------
-    env.reset()
+    # Reduce exploration
+    print("\nEpsilon before decay:", agent.epsilon)
 
-    state, reward, done = env.step(0)  # UP from (0,0)
+    agent.decay_epsilon()
 
-    print("\nTest 3 - Boundary Collision")
-    print("State:", state)
-    print("Reward:", reward)
-    print("Done:", done)
-
-    # -----------------------------
-    # Test 4: Destination
-    # -----------------------------
-    env.drone_position = (4, 3)
-
-    state, reward, done = env.step(3)  # RIGHT into destination
-
-    print("\nTest 4 - Destination Reached")
-    print("State:", state)
-    print("Reward:", reward)
-    print("Done:", done)
-
-    print("\nFinal Environment:")
-    env.render()
+    print("Epsilon after decay:", agent.epsilon)
 
 
 if __name__ == "__main__":
