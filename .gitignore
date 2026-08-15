@@ -1,24 +1,83 @@
-# Virtual environments
-venv/
-.venv/
+# ==========================
+# Python
+# ==========================
 
-# Python cache
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
 *.pyd
 
-# Environment variables
-.env
 
-# IDE settings
+# ==========================
+# Virtual Environments
+# ==========================
+
+.venv/
+venv/
+env/
+
+
+# ==========================
+# Jupyter Notebook
+# ==========================
+
+.ipynb_checkpoints/
+
+
+# ==========================
+# Environment Variables
+# ==========================
+
+.env
+.env.*
+!.env.example
+
+
+# ==========================
+# IDE / Editor
+# ==========================
+
 .vscode/
 .idea/
 
-# Generated training outputs
-results/models/
-results/logs/
 
-# OS files
+# ==========================
+# Operating System
+# ==========================
+
 .DS_Store
 Thumbs.db
+
+
+# ==========================
+# Python Testing / Cache
+# ==========================
+
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+
+# ==========================
+# Logs
+# ==========================
+
+*.log
+
+
+# ==========================
+# Frontend - add now for later UI
+# ==========================
+
+frontend/node_modules/
+frontend/dist/
+
+
+# ==========================
+# Future trained model files
+# ==========================
+
+*.pth
+*.pt
+*.h5
+*.keras

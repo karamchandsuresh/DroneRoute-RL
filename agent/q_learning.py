@@ -5,15 +5,16 @@ import numpy as np
 
 class QLearningAgent:
     """
-    Q-Learning agent for DroneRoute RL.
+    Battery-aware Q-Learning agent for DroneRoute RL.
 
-    The agent learns the best action for each state by interacting
-    with the drone environment and updating a Q-table.
+    The Q-table stores values for:
+        row × column × battery × action
     """
 
     def __init__(
         self,
         grid_size,
+        max_battery=20,
         num_actions=4,
         learning_rate=0.1,
         discount_factor=0.95,
@@ -21,8 +22,8 @@ class QLearningAgent:
         epsilon_decay=0.995,
         min_epsilon=0.01
     ):
-        # Environment information
         self.grid_size = grid_size
+        self.max_battery = max_battery
         self.num_actions = num_actions
 
         # Q-Learning hyperparameters
@@ -34,31 +35,41 @@ class QLearningAgent:
         self.epsilon_decay = epsilon_decay
         self.min_epsilon = min_epsilon
 
-        # Q-table dimensions:
-        # grid row × grid column × number of actions
+        # Q-table:
+        # row × column × battery level × action
         self.q_table = np.zeros(
-            (grid_size, grid_size, num_actions)
+            (
+                grid_size,
+                grid_size,
+                max_battery + 1,
+                num_actions
+            )
         )
 
     def choose_action(self, state):
         """
-        Choose an action using the epsilon-greedy strategy.
-
-        Exploration:
-            Choose a random action.
-
-        Exploitation:
-            Choose the action with the highest Q-value.
+        Select an action using epsilon-greedy exploration.
         """
 
         # Exploration
         if random.random() < self.epsilon:
-            return random.randint(0, self.num_actions - 1)
+            return random.randint(
+                0,
+                self.num_actions - 1
+            )
 
         # Exploitation
-        row, col = state
+        row, col, battery = state
 
-        return int(np.argmax(self.q_table[row, col]))
+        return int(
+            np.argmax(
+                self.q_table[
+                    row,
+                    col,
+                    battery
+                ]
+            )
+        )
 
     def update_q_value(
         self,
@@ -69,42 +80,63 @@ class QLearningAgent:
         done
     ):
         """
-        Update the Q-value using the Q-Learning update rule.
+        Update Q-value using the Q-Learning equation.
         """
 
-        row, col = state
-        next_row, next_col = next_state
+        row, col, battery = state
 
-        # Current Q-value
-        current_q = self.q_table[row, col, action]
+        next_row, next_col, next_battery = (
+            next_state
+        )
 
-        # If destination is reached, there is no future reward.
+        current_q = self.q_table[
+            row,
+            col,
+            battery,
+            action
+        ]
+
         if done:
             max_future_q = 0
+
         else:
             max_future_q = np.max(
-                self.q_table[next_row, next_col]
+                self.q_table[
+                    next_row,
+                    next_col,
+                    next_battery
+                ]
             )
 
-        # Target value
         target_q = (
             reward
-            + self.discount_factor * max_future_q
+            + self.discount_factor
+            * max_future_q
         )
 
-        # Q-Learning update
-        new_q = current_q + self.learning_rate * (
-            target_q - current_q
+        new_q = (
+            current_q
+            + self.learning_rate
+            * (
+                target_q
+                - current_q
+            )
         )
 
-        self.q_table[row, col, action] = new_q
+        self.q_table[
+            row,
+            col,
+            battery,
+            action
+        ] = new_q
 
     def decay_epsilon(self):
         """
-        Reduce exploration gradually as training progresses.
+        Gradually reduce exploration.
         """
 
         self.epsilon = max(
             self.min_epsilon,
-            self.epsilon * self.epsilon_decay
+            self.epsilon
+            * self.epsilon_decay
         )

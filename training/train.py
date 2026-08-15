@@ -14,23 +14,25 @@ ACTION_NAMES = {
 
 
 def train_agent(
-    episodes=1000,
+    episodes=1500,
     max_steps_per_episode=100
 ):
     """
-    Train the Q-Learning agent.
+    Train the battery-aware Q-Learning agent.
     """
 
     env = DroneEnvironment()
 
     agent = QLearningAgent(
-        grid_size=env.grid_size
+        grid_size=env.grid_size,
+        max_battery=env.max_battery
     )
 
     rewards_per_episode = []
     steps_per_episode = []
 
     successful_episodes = 0
+    battery_failures = 0
 
     for episode in range(episodes):
 
@@ -41,10 +43,13 @@ def train_agent(
 
         for step in range(max_steps_per_episode):
 
+            # Agent chooses an action
             action = agent.choose_action(state)
 
+            # Environment executes the action
             next_state, reward, done = env.step(action)
 
+            # Agent updates the Q-table
             agent.update_q_value(
                 state,
                 action,
@@ -59,7 +64,15 @@ def train_agent(
             steps += 1
 
             if done:
-                successful_episodes += 1
+
+                # Check whether the episode ended successfully
+                if env.drone_position == env.destination:
+                    successful_episodes += 1
+
+                # Otherwise, battery was depleted
+                elif env.battery <= 0:
+                    battery_failures += 1
+
                 break
 
         agent.decay_epsilon()
@@ -85,11 +98,20 @@ def train_agent(
         successful_episodes / episodes
     ) * 100
 
+    battery_failure_rate = (
+        battery_failures / episodes
+    ) * 100
+
     print("\nTraining completed.")
 
     print(
         f"Training Success Rate: "
         f"{success_rate:.2f}%"
+    )
+
+    print(
+        f"Battery Failure Rate: "
+        f"{battery_failure_rate:.2f}%"
     )
 
     return (
@@ -106,25 +128,34 @@ def evaluate_agent(
     max_steps=50
 ):
     """
-    Evaluate the trained agent using exploitation only.
+    Evaluate the trained battery-aware agent
+    using exploitation only.
     """
 
     state = env.reset()
 
-    route = [state]
+    # Store only positions for route visualization
+    route = [env.drone_position]
+
     actions_taken = []
 
     total_reward = 0
 
-    print("\n=== Learned Route Evaluation ===")
+    print("\n=== Battery-Aware Route Evaluation ===")
 
     for step in range(max_steps):
 
-        row, col = state
+        row, col, battery = state
 
+        # Exploitation only:
+        # choose the action with the highest learned Q-value
         action = int(
             np.argmax(
-                agent.q_table[row, col]
+                agent.q_table[
+                    row,
+                    col,
+                    battery
+                ]
             )
         )
 
@@ -136,7 +167,10 @@ def evaluate_agent(
             ACTION_NAMES[action]
         )
 
-        route.append(next_state)
+        # Save only the position part
+        route.append(
+            env.drone_position
+        )
 
         total_reward += reward
 
@@ -146,7 +180,8 @@ def evaluate_agent(
             break
 
     destination_reached = (
-        state == env.destination
+        env.drone_position
+        == env.destination
     )
 
     print("\nRoute:")
@@ -155,12 +190,24 @@ def evaluate_agent(
         print(position)
 
     print("\nActions:")
+
     print(
         " -> ".join(actions_taken)
     )
 
     print("\nSteps:", len(actions_taken))
     print("Total Reward:", total_reward)
+
+    print(
+        "Battery Remaining:",
+        env.battery
+    )
+
+    print(
+        "Battery Used:",
+        env.max_battery - env.battery
+    )
+
     print(
         "Destination Reached:",
         destination_reached
