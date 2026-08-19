@@ -13,16 +13,118 @@ ACTION_NAMES = {
 }
 
 
+def manhattan_distance(position, destination):
+    """
+    Calculate Manhattan distance between
+    the drone and the destination.
+
+    Example:
+        (0, 0) -> (4, 4) = 8
+    """
+
+    return (
+        abs(position[0] - destination[0])
+        + abs(position[1] - destination[1])
+    )
+
+
+def get_training_reward(
+    env,
+    previous_position,
+    new_position,
+    environment_reward,
+    done
+):
+    """
+    Apply reward shaping during DQN training.
+
+    IMPORTANT:
+    This does NOT change the actual environment reward.
+
+    The environment still uses:
+        Normal movement      = -1
+        Boundary violation   = -10
+        Obstacle collision   = -20
+        Battery depletion    = -50
+        Destination reached  = +100
+
+    Reward shaping only provides additional guidance
+    to DQN while it is learning.
+    """
+
+    # ----------------------------------------------
+    # Preserve terminal rewards
+    # ----------------------------------------------
+
+    if done:
+
+        if env.drone_position == env.destination:
+            return environment_reward
+
+        # Battery depletion
+        return environment_reward
+
+    # ----------------------------------------------
+    # Preserve collisions / invalid movements
+    # ----------------------------------------------
+
+    if environment_reward <= -10:
+        return environment_reward
+
+    # ----------------------------------------------
+    # Compare distance to destination
+    # ----------------------------------------------
+
+    previous_distance = manhattan_distance(
+        previous_position,
+        env.destination
+    )
+
+    new_distance = manhattan_distance(
+        new_position,
+        env.destination
+    )
+
+    # Moving closer to the destination
+    if new_distance < previous_distance:
+
+        return environment_reward + 2.0
+
+    # Moving farther from the destination
+    if new_distance > previous_distance:
+
+        return environment_reward - 2.0
+
+    # No useful progress
+    return environment_reward
+
+
 def train_dqn(
     episodes=1000,
     max_steps_per_episode=100,
-    target_update_frequency=10
+    target_update_frequency=10,
+    scenario="standard"
 ):
     """
-    Train the DQN agent in the battery-aware drone environment.
+    Train the DQN agent in the selected
+    battery-aware delivery scenario.
+
+    Available scenarios:
+        standard
+        urban
+        low_battery
+
+    DQN uses training-only reward shaping to
+    provide additional directional feedback.
     """
 
-    env = DroneEnvironment()
+    # --------------------------------------------------
+    # Create selected scenario
+    # --------------------------------------------------
+
+    env = DroneEnvironment(
+        scenario=scenario
+    )
 
     agent = DQNAgent(
         grid_size=env.grid_size,
@@ -36,35 +138,112 @@ def train_dqn(
     successful_episodes = 0
     battery_failures = 0
 
-    print("=== DQN Training ===")
-    print("Device:", agent.device)
-    print("Episodes:", episodes)
+    print("\n===================================")
+    print("          DQN TRAINING")
+    print("===================================")
+
+    print(
+        f"Scenario: {env.scenario_name}"
+    )
+
+    print(
+        f"Battery Capacity: "
+        f"{env.max_battery}"
+    )
+
+    print(
+        f"Obstacles: "
+        f"{len(env.obstacles)}"
+    )
+
+    print(
+        f"Device: {agent.device}"
+    )
+
+    print(
+        f"Episodes: {episodes}"
+    )
+
+    print(
+        "Reward Shaping: Enabled"
+    )
+
+    print("===================================\n")
+
+    # --------------------------------------------------
+    # Training
+    # --------------------------------------------------
 
     for episode in range(episodes):
 
         state = env.reset()
 
+        # Actual environment reward is stored here.
+        # This keeps our statistics comparable with
+        # Q-Learning and final evaluation.
         total_reward = 0
+
         steps = 0
 
-        for step in range(max_steps_per_episode):
+        for step in range(
+            max_steps_per_episode
+        ):
 
-            # 1. Select action using epsilon-greedy strategy
-            action = agent.choose_action(state)
+            # ------------------------------------------
+            # 1. Epsilon-greedy action selection
+            # ------------------------------------------
 
-            # 2. Execute action in environment
-            next_state, reward, done = env.step(action)
+            action = agent.choose_action(
+                state
+            )
 
-            # 3. Store experience in replay memory
+            # Save position before movement
+            previous_position = (
+                env.drone_position
+            )
+
+            # ------------------------------------------
+            # 2. Execute action
+            # ------------------------------------------
+
+            next_state, reward, done = (
+                env.step(action)
+            )
+
+            new_position = (
+                env.drone_position
+            )
+
+            # ------------------------------------------
+            # 3. Training-only reward shaping
+            # ------------------------------------------
+
+            training_reward = (
+                get_training_reward(
+                    env=env,
+                    previous_position=previous_position,
+                    new_position=new_position,
+                    environment_reward=reward,
+                    done=done
+                )
+            )
+
+            # ------------------------------------------
+            # 4. Store shaped experience
+            # ------------------------------------------
+
             agent.remember(
                 state,
                 action,
-                reward,
+                training_reward,
                 next_state,
                 done
             )
 
-            # 4. Learn from a random batch of past experiences
+            # ------------------------------------------
+            # 5. Experience replay
+            # ------------------------------------------
+
             loss = agent.replay()
 
             if loss is not None:
@@ -72,12 +251,19 @@ def train_dqn(
 
             state = next_state
 
+            # IMPORTANT:
+            # Statistics use the ORIGINAL environment
+            # reward, not the shaped training reward.
             total_reward += reward
+
             steps += 1
 
             if done:
 
-                if env.drone_position == env.destination:
+                if (
+                    env.drone_position
+                    == env.destination
+                ):
                     successful_episodes += 1
 
                 elif env.battery <= 0:
@@ -85,42 +271,87 @@ def train_dqn(
 
                 break
 
-        # Reduce exploration after each episode
+        # ----------------------------------------------
+        # Reduce exploration
+        # ----------------------------------------------
+
         agent.decay_epsilon()
 
-        # Periodically update target network
-        if (episode + 1) % target_update_frequency == 0:
+        # ----------------------------------------------
+        # Update target network
+        # ----------------------------------------------
+
+        if (
+            episode + 1
+        ) % target_update_frequency == 0:
+
             agent.update_target_network()
 
-        rewards_per_episode.append(total_reward)
-        steps_per_episode.append(steps)
+        rewards_per_episode.append(
+            total_reward
+        )
 
-        if (episode + 1) % 100 == 0:
+        steps_per_episode.append(
+            steps
+        )
 
-            recent_rewards = rewards_per_episode[-100:]
+        # ----------------------------------------------
+        # Training progress
+        # ----------------------------------------------
 
-            average_reward = np.mean(recent_rewards)
+        if (
+            episode + 1
+        ) % 100 == 0:
 
-            recent_steps = steps_per_episode[-100:]
-
-            average_steps = np.mean(recent_steps)
-
-            print(
-                f"Episode {episode + 1}/{episodes} | "
-                f"Average Reward: {average_reward:.2f} | "
-                f"Average Steps: {average_steps:.2f} | "
-                f"Epsilon: {agent.epsilon:.3f}"
+            recent_rewards = (
+                rewards_per_episode[-100:]
             )
 
+            average_reward = np.mean(
+                recent_rewards
+            )
+
+            recent_steps = (
+                steps_per_episode[-100:]
+            )
+
+            average_steps = np.mean(
+                recent_steps
+            )
+
+            print(
+                f"Episode "
+                f"{episode + 1}/{episodes} | "
+                f"Average Reward: "
+                f"{average_reward:.2f} | "
+                f"Average Steps: "
+                f"{average_steps:.2f} | "
+                f"Epsilon: "
+                f"{agent.epsilon:.3f}"
+            )
+
+    # --------------------------------------------------
+    # Training statistics
+    # --------------------------------------------------
+
     success_rate = (
-        successful_episodes / episodes
+        successful_episodes
+        / episodes
     ) * 100
 
     battery_failure_rate = (
-        battery_failures / episodes
+        battery_failures
+        / episodes
     ) * 100
 
-    print("\nDQN training completed.")
+    print(
+        "\nDQN training completed."
+    )
+
+    print(
+        f"Scenario: "
+        f"{env.scenario_name}"
+    )
 
     print(
         f"Training Success Rate: "
@@ -133,10 +364,31 @@ def train_dqn(
     )
 
     if losses:
+
         print(
             f"Final Training Loss: "
             f"{losses[-1]:.4f}"
         )
+
+    # Store statistics for API access
+
+    env.training_success_rate = (
+        success_rate
+    )
+
+    env.battery_failure_rate = (
+        battery_failure_rate
+    )
+
+    if losses:
+
+        env.final_training_loss = (
+            losses[-1]
+        )
+
+    else:
+
+        env.final_training_loss = None
 
     return (
         env,
@@ -153,22 +405,45 @@ def evaluate_dqn(
     max_steps=50
 ):
     """
-    Evaluate the trained DQN using exploitation only.
+    Evaluate the trained DQN using
+    exploitation only.
+
+    IMPORTANT:
+    Reward shaping is NOT used here.
+
+    Evaluation uses the original environment
+    reward system.
     """
 
     state = env.reset()
 
-    route = [env.drone_position]
+    route = [
+        env.drone_position
+    ]
+
     actions_taken = []
 
     total_reward = 0
 
-    print("\n=== DQN Route Evaluation ===")
+    print(
+        "\n=== DQN Route Evaluation ==="
+    )
+
+    print(
+        f"Scenario: "
+        f"{env.scenario_name}"
+    )
 
     for step in range(max_steps):
 
-        normalized_state = agent.normalize_state(
-            state
+        # ----------------------------------------------
+        # Normalize state
+        # ----------------------------------------------
+
+        normalized_state = (
+            agent.normalize_state(
+                state
+            )
         )
 
         state_tensor = torch.tensor(
@@ -177,11 +452,16 @@ def evaluate_dqn(
             device=agent.device
         ).unsqueeze(0)
 
-        # No exploration during evaluation
+        # ----------------------------------------------
+        # Exploitation only
+        # ----------------------------------------------
+
         with torch.no_grad():
 
-            q_values = agent.policy_network(
-                state_tensor
+            q_values = (
+                agent.policy_network(
+                    state_tensor
+                )
             )
 
             action = int(
@@ -191,8 +471,12 @@ def evaluate_dqn(
                 ).item()
             )
 
-        next_state, reward, done = env.step(
-            action
+        # ----------------------------------------------
+        # Execute action
+        # ----------------------------------------------
+
+        next_state, reward, done = (
+            env.step(action)
         )
 
         actions_taken.append(
@@ -203,6 +487,7 @@ def evaluate_dqn(
             env.drone_position
         )
 
+        # ORIGINAL environment reward
         total_reward += reward
 
         state = next_state
@@ -210,9 +495,18 @@ def evaluate_dqn(
         if done:
             break
 
+    # --------------------------------------------------
+    # Evaluation statistics
+    # --------------------------------------------------
+
     destination_reached = (
         env.drone_position
         == env.destination
+    )
+
+    battery_used = (
+        env.max_battery
+        - env.battery
     )
 
     print("\nRoute:")
@@ -223,11 +517,20 @@ def evaluate_dqn(
     print("\nActions:")
 
     print(
-        " -> ".join(actions_taken)
+        " -> ".join(
+            actions_taken
+        )
     )
 
-    print("\nSteps:", len(actions_taken))
-    print("Total Reward:", total_reward)
+    print(
+        "\nSteps:",
+        len(actions_taken)
+    )
+
+    print(
+        "Total Reward:",
+        total_reward
+    )
 
     print(
         "Battery Remaining:",
@@ -236,7 +539,7 @@ def evaluate_dqn(
 
     print(
         "Battery Used:",
-        env.max_battery - env.battery
+        battery_used
     )
 
     print(
@@ -245,6 +548,7 @@ def evaluate_dqn(
     )
 
     print("\nFinal Environment:")
+
     env.render()
 
     return (
@@ -257,9 +561,28 @@ def evaluate_dqn(
 
 if __name__ == "__main__":
 
-    env, agent, rewards, steps, losses = train_dqn()
+    # Default scenario when running:
+    #
+    # python -m training.train_dqn
+    #
+    # Other options:
+    #     urban
+    #     low_battery
 
-    route, actions, total_reward, reached = evaluate_dqn(
+    selected_scenario = "standard"
+
+    env, agent, rewards, steps, losses = (
+        train_dqn(
+            scenario=selected_scenario
+        )
+    )
+
+    (
+        route,
+        actions,
+        total_reward,
+        reached
+    ) = evaluate_dqn(
         env,
         agent
     )

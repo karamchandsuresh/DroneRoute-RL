@@ -1,22 +1,32 @@
+from typing import Literal
+
+import numpy as np
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from environment.drone_env import DroneEnvironment
-from agent.q_learning import QLearningAgent
+from training.train import train_agent, evaluate_agent
 from training.train_dqn import train_dqn, evaluate_dqn
 
+
+# =========================================================
+# FastAPI Application
+# =========================================================
 
 app = FastAPI(
     title="DroneRoute RL API",
     description=(
-        "Backend API for Drone Delivery Optimization "
-        "using Reinforcement Learning."
+        "Backend API for scenario-based drone delivery "
+        "optimization using Q-Learning and Deep Q-Networks."
     ),
-    version="1.0.0"
+    version="2.0.0"
 )
 
 
-# Allow React/Vite frontend to access the backend
+# =========================================================
+# CORS
+# =========================================================
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -28,183 +38,243 @@ app.add_middleware(
 )
 
 
-ACTION_NAMES = {
-    0: "UP",
-    1: "DOWN",
-    2: "LEFT",
-    3: "RIGHT"
+# =========================================================
+# Scenario Type
+# =========================================================
+
+ScenarioType = Literal[
+    "standard",
+    "urban",
+    "low_battery"
+]
+
+
+# =========================================================
+# Scenario Training Configuration
+# =========================================================
+
+Q_LEARNING_EPISODES = {
+    "standard": 1500,
+    "urban": 2000,
+    "low_battery": 2500
 }
 
 
-# ---------------------------------------------------------
+DQN_EPISODES = {
+    "standard": 1000,
+    "urban": 1500,
+    "low_battery": 2000
+}
+
+
+# =========================================================
 # Health Check
-# ---------------------------------------------------------
+# =========================================================
 
 @app.get("/")
 def root():
+    """
+    Basic API health check.
+    """
+
     return {
+        "project": "DroneRoute RL",
         "message": "DroneRoute RL API is running",
-        "status": "success"
+        "status": "success",
+        "version": "2.0.0"
     }
 
 
-# ---------------------------------------------------------
+# =========================================================
+# Available Scenarios
+# =========================================================
+
+@app.get("/scenarios")
+def get_scenarios():
+    """
+    Return all delivery scenarios available
+    in the simulator.
+    """
+
+    scenarios = []
+
+    for scenario_key in DroneEnvironment.SCENARIOS:
+
+        env = DroneEnvironment(
+            scenario=scenario_key
+        )
+
+        scenarios.append(
+            env.get_scenario_info()
+        )
+
+    return {
+        "scenarios": scenarios
+    }
+
+
+# =========================================================
 # Environment Information
-# ---------------------------------------------------------
+# =========================================================
 
 @app.get("/environment")
-def get_environment():
-    env = DroneEnvironment()
-
-    return {
-        "grid_size": env.grid_size,
-        "start": list(env.start_position),
-        "destination": list(env.destination),
-        "obstacles": [
-            list(position)
-            for position in env.obstacles
-        ],
-        "max_battery": env.max_battery
-    }
-
-
-# ---------------------------------------------------------
-# Q-Learning Training
-# ---------------------------------------------------------
-
-def train_q_learning(episodes=1500):
+def get_environment(
+    scenario: ScenarioType = "standard"
+):
     """
-    Train the battery-aware Q-Learning agent.
+    Return the environment configuration
+    for the selected delivery scenario.
     """
 
-    env = DroneEnvironment()
-
-    agent = QLearningAgent(
-        grid_size=env.grid_size,
-        max_battery=env.max_battery
+    env = DroneEnvironment(
+        scenario=scenario
     )
 
-    successful_episodes = 0
-
-    for episode in range(episodes):
-
-        state = env.reset()
-
-        for step in range(100):
-
-            action = agent.choose_action(state)
-
-            next_state, reward, done = env.step(action)
-
-            agent.update_q_value(
-                state,
-                action,
-                reward,
-                next_state,
-                done
-            )
-
-            state = next_state
-
-            if done:
-
-                if env.drone_position == env.destination:
-                    successful_episodes += 1
-
-                break
-
-        agent.decay_epsilon()
-
-    success_rate = (
-        successful_episodes / episodes
-    ) * 100
-
-    return env, agent, success_rate
+    return env.get_scenario_info()
 
 
-# ---------------------------------------------------------
-# Q-Learning Route Endpoint
-# ---------------------------------------------------------
+# =========================================================
+# Q-Learning Route
+# =========================================================
 
 @app.get("/route/q-learning")
-def get_q_learning_route():
+def get_q_learning_route(
+    scenario: ScenarioType = "standard"
+):
     """
-    Train Q-Learning and return the learned route.
+    Train and evaluate the Q-Learning agent
+    for the selected scenario.
     """
 
-    env, agent, success_rate = train_q_learning()
-
-    state = env.reset()
-
-    route = [
-        list(env.drone_position)
+    episodes = Q_LEARNING_EPISODES[
+        scenario
     ]
 
-    actions = []
+    (
+        env,
+        agent,
+        rewards,
+        steps
+    ) = train_agent(
+        episodes=episodes,
+        scenario=scenario
+    )
 
-    total_reward = 0
-
-    for step in range(50):
-
-        row, col, battery = state
-
-        action = int(
-            agent.q_table[
-                row,
-                col,
-                battery
-            ].argmax()
-        )
-
-        next_state, reward, done = env.step(action)
-
-        actions.append(
-            ACTION_NAMES[action]
-        )
-
-        route.append(
-            list(env.drone_position)
-        )
-
-        total_reward += reward
-
-        state = next_state
-
-        if done:
-            break
+    (
+        route,
+        actions,
+        total_reward
+    ) = evaluate_agent(
+        env,
+        agent
+    )
 
     destination_reached = (
         env.drone_position
         == env.destination
     )
 
+    battery_used = (
+        env.max_battery
+        - env.battery
+    )
+
+    average_reward_last_100 = round(
+        float(
+            np.mean(
+                rewards[-100:]
+            )
+        ),
+        2
+    )
+
+    average_steps_last_100 = round(
+        float(
+            np.mean(
+                steps[-100:]
+            )
+        ),
+        2
+    )
+
     return {
         "algorithm": "Q-Learning",
-        "route": route,
-        "actions": actions,
-        "steps": len(actions),
-        "total_reward": total_reward,
-        "battery_remaining": env.battery,
-        "battery_used": (
-            env.max_battery - env.battery
+
+        "scenario": scenario,
+
+        "scenario_name": (
+            env.scenario_name
         ),
-        "destination_reached": destination_reached,
+
+        "scenario_description": (
+            env.scenario_description
+        ),
+
+        "episodes": episodes,
+
+        "route": [
+            list(position)
+            for position in route
+        ],
+
+        "actions": actions,
+
+        "steps": len(actions),
+
+        "total_reward": total_reward,
+
+        "battery_capacity": (
+            env.max_battery
+        ),
+
+        "battery_remaining": (
+            env.battery
+        ),
+
+        "battery_used": (
+            battery_used
+        ),
+
+        "destination_reached": (
+            destination_reached
+        ),
+
         "training_success_rate": round(
-            success_rate,
+            env.training_success_rate,
             2
+        ),
+
+        "battery_failure_rate": round(
+            env.battery_failure_rate,
+            2
+        ),
+
+        "average_reward_last_100": (
+            average_reward_last_100
+        ),
+
+        "average_steps_last_100": (
+            average_steps_last_100
         )
     }
 
 
-# ---------------------------------------------------------
-# DQN Route Endpoint
-# ---------------------------------------------------------
+# =========================================================
+# DQN Route
+# =========================================================
 
 @app.get("/route/dqn")
-def get_dqn_route():
+def get_dqn_route(
+    scenario: ScenarioType = "standard"
+):
     """
-    Train the DQN agent and return its learned route.
+    Train and evaluate the DQN agent
+    for the selected delivery scenario.
     """
+
+    episodes = DQN_EPISODES[
+        scenario
+    ]
 
     (
         env,
@@ -213,7 +283,8 @@ def get_dqn_route():
         steps,
         losses
     ) = train_dqn(
-        episodes=1000
+        episodes=episodes,
+        scenario=scenario
     )
 
     (
@@ -226,41 +297,121 @@ def get_dqn_route():
         agent
     )
 
+    battery_used = (
+        env.max_battery
+        - env.battery
+    )
+
+    average_reward_last_100 = round(
+        float(
+            np.mean(
+                rewards[-100:]
+            )
+        ),
+        2
+    )
+
+    average_steps_last_100 = round(
+        float(
+            np.mean(
+                steps[-100:]
+            )
+        ),
+        2
+    )
+
     return {
         "algorithm": "DQN",
+
+        "scenario": scenario,
+
+        "scenario_name": (
+            env.scenario_name
+        ),
+
+        "scenario_description": (
+            env.scenario_description
+        ),
+
+        "episodes": episodes,
+
         "route": [
             list(position)
             for position in route
         ],
+
         "actions": actions,
+
         "steps": len(actions),
+
         "total_reward": total_reward,
-        "battery_remaining": env.battery,
-        "battery_used": (
-            env.max_battery - env.battery
+
+        "battery_capacity": (
+            env.max_battery
         ),
-        "destination_reached": destination_reached,
-        "average_reward_last_100": round(
-            sum(rewards[-100:]) / len(rewards[-100:]),
+
+        "battery_remaining": (
+            env.battery
+        ),
+
+        "battery_used": (
+            battery_used
+        ),
+
+        "destination_reached": (
+            destination_reached
+        ),
+
+        "training_success_rate": round(
+            env.training_success_rate,
             2
+        ),
+
+        "battery_failure_rate": round(
+            env.battery_failure_rate,
+            2
+        ),
+
+        "average_reward_last_100": (
+            average_reward_last_100
+        ),
+
+        "average_steps_last_100": (
+            average_steps_last_100
+        ),
+
+        "final_training_loss": (
+            round(
+                float(
+                    env.final_training_loss
+                ),
+                4
+            )
+            if env.final_training_loss
+            is not None
+            else None
         )
     }
-    
+
+
+# =========================================================
+# Reward / Penalty Exploration Demo
+# =========================================================
+
 @app.get("/demo/exploration")
 def exploration_demo():
     """
-    Demonstrate rewards and penalties using one
-    continuous drone journey.
+    Demonstrate the reward system using one
+    continuous journey in the Standard Delivery
+    environment.
 
-    The sequence includes:
-    - boundary collision,
-    - normal movement,
-    - obstacle collision,
-    - safe navigation,
-    - destination reward.
+    This demo is intentionally separate from
+    trained Q-Learning and DQN policies.
     """
 
-    env = DroneEnvironment()
+    env = DroneEnvironment(
+        scenario="standard"
+    )
 
     events = []
 
@@ -274,25 +425,32 @@ def exploration_demo():
         3: "RIGHT"
     }
 
-    # Continuous demonstration sequence
+    # -----------------------------------------------------
+    # Demonstration sequence
+    # -----------------------------------------------------
     #
     # Start: (0, 0)
     #
-    # UP       -> boundary collision
-    # RIGHT    -> (0, 1)
-    # DOWN     -> obstacle at (1, 1)
-    # RIGHT    -> (0, 2)
-    # RIGHT    -> (0, 3)
-    # RIGHT    -> (0, 4)
-    # DOWN     -> (1, 4)
-    # DOWN     -> (2, 4)
-    # DOWN     -> (3, 4)
-    # DOWN     -> destination (4, 4)
+    # UP
+    #   -> Boundary collision (-10)
+    #
+    # RIGHT
+    #   -> Normal movement (-1)
+    #
+    # DOWN
+    #   -> Obstacle collision at (1,1) (-20)
+    #
+    # Remaining actions form a safe path
+    # toward the destination.
+    #
+    # Final action
+    #   -> Successful delivery (+100)
+    # -----------------------------------------------------
 
     demonstration_actions = [
-        0,  # UP - boundary
+        0,  # UP - boundary collision
         3,  # RIGHT
-        1,  # DOWN - obstacle
+        1,  # DOWN - obstacle collision
         3,  # RIGHT
         3,  # RIGHT
         3,  # RIGHT
@@ -306,67 +464,124 @@ def exploration_demo():
 
         step_number += 1
 
-        state_before = env.drone_position
-
-        row_change, col_change = env.actions[action]
-
-        attempted_position = (
-            state_before[0] + row_change,
-            state_before[1] + col_change
+        state_before = (
+            env.drone_position
         )
 
-        next_state, reward, done = env.step(action)
+        row_change, col_change = (
+            env.actions[action]
+        )
+
+        attempted_position = (
+            state_before[0]
+            + row_change,
+
+            state_before[1]
+            + col_change
+        )
+
+        (
+            next_state,
+            reward,
+            done
+        ) = env.step(
+            action
+        )
 
         cumulative_reward += reward
 
+        # -------------------------------------------------
         # Determine event type
-        if done and env.drone_position == env.destination:
+        # -------------------------------------------------
+
+        if (
+            done
+            and env.drone_position
+            == env.destination
+        ):
+
             event_type = "goal"
 
             message = (
-                "Destination reached. Large positive "
-                "reward received."
+                "Destination reached. "
+                "Large positive reward received."
             )
 
-        elif not env._is_inside_grid(attempted_position):
+        elif not env._is_inside_grid(
+            attempted_position
+        ):
+
             event_type = "boundary"
 
             message = (
-                "Boundary collision. Drone cannot "
-                "leave the grid."
+                "Boundary collision. "
+                "Drone cannot leave the "
+                "permitted operating area."
             )
 
-        elif attempted_position in env.obstacles:
+        elif (
+            attempted_position
+            in env.obstacles
+        ):
+
             event_type = "obstacle"
 
             message = (
-                "Obstacle collision. Drone remains "
-                "in the previous position."
+                "Obstacle collision. "
+                "The drone receives a penalty "
+                "and remains in its previous position."
             )
 
         else:
+
             event_type = "normal"
 
             message = (
-                "Valid movement. Small step penalty received."
+                "Valid movement. "
+                "A small movement cost is applied."
             )
 
         events.append({
             "type": event_type,
+
             "step": step_number,
-            "action": action_names[action],
-            "from": list(state_before),
-            "attempted": list(attempted_position),
-            "to": list(env.drone_position),
+
+            "action": (
+                action_names[action]
+            ),
+
+            "from": list(
+                state_before
+            ),
+
+            "attempted": list(
+                attempted_position
+            ),
+
+            "to": list(
+                env.drone_position
+            ),
+
             "reward": reward,
-            "cumulative_reward": cumulative_reward,
+
+            "cumulative_reward": (
+                cumulative_reward
+            ),
+
             "battery_used": (
-                env.max_battery - env.battery
+                env.max_battery
+                - env.battery
             ),
-            "battery_remaining": env.battery,
+
+            "battery_remaining": (
+                env.battery
+            ),
+
             "destination_reached": (
-                env.drone_position == env.destination
+                env.drone_position
+                == env.destination
             ),
+
             "message": message
         })
 
@@ -374,6 +589,24 @@ def exploration_demo():
             break
 
     return {
-        "demo": "RL Exploration and Reward Demonstration",
-        "events": events
+        "demo": (
+            "RL Exploration and "
+            "Reward Demonstration"
+        ),
+
+        "scenario": "standard",
+
+        "reward_system": {
+            "normal_movement": -1,
+            "boundary_violation": -10,
+            "obstacle_collision": -20,
+            "battery_depletion": -50,
+            "successful_delivery": 100
+        },
+
+        "events": events,
+
+        "final_cumulative_reward": (
+            cumulative_reward
+        )
     }

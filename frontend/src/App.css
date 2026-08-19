@@ -1,5 +1,13 @@
+/* =========================================
+   Global
+========================================= */
+
 * {
   box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
@@ -11,14 +19,20 @@ body {
   color: #182230;
 }
 
-button {
+button,
+select {
   font: inherit;
 }
 
 .app {
   min-height: 100vh;
-  padding: 45px 7%;
+  padding: 45px 7% 70px;
 }
+
+
+/* =========================================
+   Header
+========================================= */
 
 .header {
   max-width: 1200px;
@@ -57,6 +71,11 @@ button {
   font-size: 14px;
 }
 
+
+/* =========================================
+   Main Dashboard
+========================================= */
+
 .dashboard {
   max-width: 1200px;
   margin: auto;
@@ -89,6 +108,11 @@ button {
   border-radius: 8px;
   font-weight: 700;
 }
+
+
+/* =========================================
+   Environment Grid
+========================================= */
 
 .grid {
   display: grid;
@@ -145,6 +169,11 @@ button {
   font-size: 14px;
 }
 
+
+/* =========================================
+   Control Panel
+========================================= */
+
 .control-panel {
   display: flex;
   flex-direction: column;
@@ -155,6 +184,45 @@ button {
   color: #667085;
   margin: 15px 0 25px;
 }
+
+.algorithm-control {
+  margin-bottom: 18px;
+}
+
+.algorithm-control label {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #475467;
+}
+
+.algorithm-control select {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid #d0d5dd;
+  border-radius: 10px;
+  background: white;
+  color: #182230;
+  cursor: pointer;
+  outline: none;
+}
+
+.algorithm-control select:focus {
+  border-color: #2563eb;
+  box-shadow:
+    0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.algorithm-control select:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+
+/* =========================================
+   Run Button
+========================================= */
 
 .run-button {
   width: 100%;
@@ -178,117 +246,6 @@ button {
   cursor: not-allowed;
 }
 
-.metrics {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin-top: 25px;
-}
-
-.metric-card {
-  padding: 18px;
-  border-radius: 12px;
-  background: #f8fafc;
-  border: 1px solid #eaecf0;
-}
-
-.metric-card span {
-  display: block;
-  color: #667085;
-  font-size: 13px;
-  margin-bottom: 5px;
-}
-
-.metric-card strong {
-  font-size: 22px;
-}
-
-.route-details {
-  margin-top: 25px;
-  padding: 20px;
-  border-radius: 12px;
-  background: #f8fafc;
-}
-
-.route-details h3 {
-  margin: 0 0 8px;
-  font-size: 14px;
-}
-
-.route-details h3:not(:first-child) {
-  margin-top: 20px;
-}
-
-.route-details p {
-  margin: 0;
-  color: #475467;
-  line-height: 1.6;
-}
-
-.error-message {
-  color: #b42318;
-  margin-bottom: 0;
-}
-
-.loading-screen {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-family: system-ui, sans-serif;
-}
-
-@media (max-width: 850px) {
-  .dashboard {
-    grid-template-columns: 1fr;
-  }
-
-  .header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .app {
-    padding: 30px 5%;
-  }
-}
-
-.algorithm-control {
-  margin-bottom: 18px;
-}
-
-.algorithm-control label {
-  display: block;
-  margin-bottom: 7px;
-  font-size: 13px;
-  font-weight: 700;
-  color: #475467;
-}
-
-.algorithm-control select {
-  width: 100%;
-  padding: 12px 14px;
-  border: 1px solid #d0d5dd;
-  border-radius: 10px;
-  background: white;
-  color: #182230;
-  font: inherit;
-  cursor: pointer;
-  outline: none;
-}
-
-.algorithm-control select:focus {
-  border-color: #2563eb;
-  box-shadow:
-    0 0 0 3px rgba(37, 99, 235, 0.1);
-}
-
-.algorithm-control select:disabled {
-  cursor: not-allowed;
-  opacity: 0.7;
-}
-
 .training-note {
   margin: 12px 0 0;
   padding: 10px 12px;
@@ -298,6 +255,7 @@ button {
   font-size: 13px;
   line-height: 1.5;
 }
+
 
 /* =========================================
    Exploration Demo
@@ -347,7 +305,9 @@ button {
 }
 
 
-/* Exploration Event */
+/* =========================================
+   Exploration Event
+========================================= */
 
 .demo-event-card {
   margin-top: 16px;
@@ -377,7 +337,9 @@ button {
 }
 
 
-/* Reward Indicators */
+/* =========================================
+   Reward Indicators
+========================================= */
 
 .reward-badge {
   padding: 5px 9px;
@@ -403,7 +365,9 @@ button {
 }
 
 
-/* Attempted Cell */
+/* =========================================
+   Attempted Cell Animation
+========================================= */
 
 .grid-cell.attempted {
   outline: 4px solid rgba(239, 68, 68, 0.45);
@@ -423,4 +387,586 @@ button {
   100% {
     transform: scale(1);
   }
+}
+
+
+/* =========================================
+   Metrics
+========================================= */
+
+.metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 25px;
+}
+
+.metric-card {
+  padding: 18px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #eaecf0;
+}
+
+.metric-card span {
+  display: block;
+  color: #667085;
+  font-size: 13px;
+  margin-bottom: 5px;
+}
+
+.metric-card strong {
+  font-size: 22px;
+}
+
+
+/* =========================================
+   Route Details
+========================================= */
+
+.route-details {
+  margin-top: 25px;
+  padding: 20px;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.route-details h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.route-details h3:not(:first-child) {
+  margin-top: 20px;
+}
+
+.route-details p {
+  margin: 0;
+  color: #475467;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.error-message {
+  color: #b42318;
+  margin-bottom: 0;
+}
+
+
+/* =========================================
+   Real-World Section
+========================================= */
+
+.real-world-section {
+  max-width: 1200px;
+  margin: 70px auto 0;
+}
+
+.real-world-heading {
+  max-width: 760px;
+  margin-bottom: 30px;
+}
+
+.real-world-heading h2 {
+  margin: 0;
+  font-size: 32px;
+}
+
+.real-world-heading > p:last-child {
+  color: #667085;
+  line-height: 1.75;
+  margin: 14px 0 0;
+}
+
+
+/* =========================================
+   Problem and Solution
+========================================= */
+
+.relevance-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.relevance-card {
+  background: white;
+  border-radius: 18px;
+  padding: 28px;
+  box-shadow:
+    0 10px 30px rgba(16, 24, 40, 0.06);
+}
+
+.relevance-card h3 {
+  margin: 15px 0 10px;
+  font-size: 20px;
+}
+
+.relevance-card p {
+  color: #667085;
+  line-height: 1.7;
+  margin: 8px 0;
+}
+
+.relevance-icon {
+  width: 45px;
+  height: 45px;
+  border-radius: 12px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #eff6ff;
+  color: #2563eb;
+  font-weight: 900;
+  font-size: 15px;
+}
+
+
+/* =========================================
+   Section Headings
+========================================= */
+
+.section-heading-small {
+  margin-bottom: 22px;
+}
+
+.section-heading-small h2 {
+  margin: 0;
+  font-size: 25px;
+}
+
+
+/* =========================================
+   Simulation Mapping
+========================================= */
+
+.mapping-section {
+  margin-top: 55px;
+}
+
+.mapping-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.mapping-card {
+  display: grid;
+  grid-template-columns: 110px 35px 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 18px;
+  background: white;
+  border: 1px solid #eaecf0;
+  border-radius: 12px;
+}
+
+.mapping-simulation {
+  font-weight: 800;
+  color: #1d4ed8;
+}
+
+.mapping-arrow {
+  text-align: center;
+  color: #98a2b3;
+  font-weight: 800;
+}
+
+.mapping-real {
+  color: #475467;
+  line-height: 1.5;
+}
+
+
+/* =========================================
+   Real Implementation Flow
+========================================= */
+
+.application-flow {
+  margin-top: 55px;
+}
+
+.flow-container {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.flow-step {
+  flex: 1;
+  min-width: 0;
+  padding: 20px 16px;
+  border-radius: 14px;
+  background: white;
+  border: 1px solid #eaecf0;
+}
+
+.flow-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 7px;
+  background: #eff6ff;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.flow-step h3 {
+  margin: 13px 0 8px;
+  font-size: 16px;
+}
+
+.flow-step p {
+  margin: 0;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.flow-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #98a2b3;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+
+/* =========================================
+   Benefits
+========================================= */
+
+.benefits-section {
+  margin-top: 55px;
+}
+
+.benefits-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 15px;
+}
+
+.benefit-card {
+  padding: 22px;
+  background: white;
+  border-radius: 14px;
+  border: 1px solid #eaecf0;
+}
+
+.benefit-card h3 {
+  margin: 0 0 10px;
+  font-size: 17px;
+}
+
+.benefit-card p {
+  margin: 0;
+  color: #667085;
+  line-height: 1.65;
+  font-size: 14px;
+}
+
+
+/* =========================================
+   Limitations and Future Scope
+========================================= */
+
+.future-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+  margin-top: 55px;
+}
+
+.future-card {
+  padding: 28px;
+  background: white;
+  border-radius: 18px;
+  box-shadow:
+    0 10px 30px rgba(16, 24, 40, 0.05);
+}
+
+.future-card h2 {
+  margin: 0;
+  font-size: 23px;
+}
+
+.future-card ul {
+  margin: 20px 0 0;
+  padding-left: 20px;
+}
+
+.future-card li {
+  margin-bottom: 12px;
+  color: #667085;
+  line-height: 1.6;
+}
+
+.limitation-card {
+  border-top: 4px solid #f59e0b;
+}
+
+
+/* =========================================
+   Project Positioning
+========================================= */
+
+.project-positioning {
+  margin-top: 55px;
+  padding: 35px;
+  background: #172554;
+  border-radius: 20px;
+  color: white;
+}
+
+.project-positioning .section-label {
+  color: #93c5fd;
+}
+
+.project-positioning h2 {
+  margin: 0;
+  font-size: 27px;
+}
+
+.project-positioning > p:last-of-type {
+  max-width: 850px;
+  color: #dbeafe;
+  line-height: 1.75;
+  margin: 15px 0 25px;
+}
+
+.positioning-flow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.positioning-flow span {
+  padding: 11px 15px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.1);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.positioning-flow strong {
+  color: #93c5fd;
+}
+
+
+/* =========================================
+   Loading Screen
+========================================= */
+
+.loading-screen {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: system-ui, sans-serif;
+}
+
+
+/* =========================================
+   Tablet
+========================================= */
+
+@media (max-width: 1000px) {
+
+  .benefits-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .flow-container {
+    flex-direction: column;
+  }
+
+  .flow-arrow {
+    transform: rotate(90deg);
+    min-height: 25px;
+  }
+}
+
+
+/* =========================================
+   Mobile / Small Screens
+========================================= */
+
+@media (max-width: 850px) {
+
+  .dashboard {
+    grid-template-columns: 1fr;
+  }
+
+  .header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .app {
+    padding: 30px 5% 50px;
+  }
+
+  .real-world-section {
+    margin-top: 50px;
+  }
+
+  .relevance-grid,
+  .future-grid,
+  .mapping-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .real-world-heading h2 {
+    font-size: 28px;
+  }
+}
+
+
+/* =========================================
+   Very Small Screens
+========================================= */
+
+@media (max-width: 550px) {
+
+  .header h1 {
+    font-size: 34px;
+  }
+
+  .panel {
+    padding: 20px;
+  }
+
+  .metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .benefits-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mapping-card {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .mapping-arrow {
+    text-align: left;
+    transform: rotate(90deg);
+    width: fit-content;
+  }
+
+  .project-positioning {
+    padding: 25px 20px;
+  }
+
+  .positioning-flow {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .positioning-flow strong {
+    transform: rotate(90deg);
+    margin-left: 20px;
+  }
+}
+
+/* =========================================
+   Scenario Selector (App.jsx integration)
+========================================= */
+
+.scenario-section {
+  max-width: 1200px;
+  margin: 0 auto 25px;
+  padding: 28px 30px;
+  background: #ffffff;
+  border-radius: 20px;
+  box-shadow: 0 12px 35px rgba(16, 24, 40, 0.07);
+}
+
+.scenario-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.scenario-heading h2 { margin: 0; font-size: 25px; }
+.scenario-badge { padding: 8px 12px; border-radius: 999px; background: #eff6ff; color: #1d4ed8; font-size: 13px; font-weight: 800; }
+.scenario-introduction, .scenario-description { color: #667085; line-height: 1.65; }
+.scenario-introduction { margin: 12px 0 20px; }
+.scenario-description { margin: 18px 0 0; }
+.scenario-options { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.scenario-card { text-align: left; padding: 17px; border: 1px solid #d0d5dd; border-radius: 12px; background: #fff; cursor: pointer; transition: .2s ease; color: #182230; }
+.scenario-card strong { display: block; margin-bottom: 7px; }
+.scenario-card span { display: block; color: #667085; font-size: 13px; line-height: 1.5; }
+.scenario-card:hover:not(:disabled) { border-color: #2563eb; transform: translateY(-1px); }
+.scenario-card.active-scenario { border-color: #2563eb; background: #eff6ff; box-shadow: 0 0 0 2px rgba(37,99,235,.08); }
+.scenario-card:disabled { opacity: .65; cursor: not-allowed; }
+.scenario-details { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 16px; }
+.scenario-details > div { padding: 13px 15px; border-radius: 10px; background: #f8fafc; border: 1px solid #eaecf0; }
+.scenario-details span { display: block; margin-bottom: 4px; color: #667085; font-size: 12px; }
+.scenario-details strong { font-size: 14px; }
+
+/* =========================================
+   Real-world section names used by App.jsx
+========================================= */
+.section-intro { max-width: 780px; margin-bottom: 30px; }
+.section-intro h2, .mapping-heading h2, .workflow-section h2, .benefits-section h2, .rl-explanation h2 { margin: 0; }
+.section-intro > p:last-child { color: #667085; line-height: 1.75; margin: 14px 0 0; }
+.problem-solution-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+.info-card { padding: 28px; background: #fff; border-radius: 18px; box-shadow: 0 10px 30px rgba(16,24,40,.06); }
+.info-number { display: inline-flex; align-items: center; justify-content: center; min-width: 42px; height: 34px; border-radius: 9px; background: #eff6ff; color: #2563eb; font-weight: 900; font-size: 13px; }
+.info-card h3 { margin: 15px 0 10px; font-size: 20px; }
+.info-card p { margin: 0; color: #667085; line-height: 1.7; }
+.mapping-heading { margin-bottom: 22px; }
+.mapping-card > span { font-weight: 800; color: #1d4ed8; }
+.mapping-card > strong { text-align: center; color: #98a2b3; }
+.mapping-card > p { margin: 0; color: #475467; line-height: 1.5; }
+.workflow-section { margin-top: 55px; }
+.workflow { display: flex; align-items: stretch; gap: 10px; margin-top: 22px; }
+.workflow-step { flex: 1; min-width: 0; padding: 20px 16px; border-radius: 14px; background: #fff; border: 1px solid #eaecf0; }
+.workflow-number { display: inline-flex; align-items: center; justify-content: center; min-width: 34px; height: 28px; padding: 0 8px; border-radius: 7px; background: #eff6ff; color: #2563eb; font-size: 12px; font-weight: 800; }
+.workflow-step h3 { margin: 13px 0 8px; font-size: 16px; }
+.workflow-step p { margin: 0; color: #667085; font-size: 13px; line-height: 1.6; }
+.workflow-arrow { display: flex; align-items: center; justify-content: center; color: #98a2b3; font-size: 22px; font-weight: 800; }
+.benefits-section > h2 { margin-bottom: 22px; }
+.benefit-icon { width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; margin-bottom: 15px; border-radius: 11px; background: #eff6ff; color: #2563eb; font-size: 20px; font-weight: 900; }
+.rl-explanation { margin-top: 55px; display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; padding: 30px; background: #fff; border-radius: 18px; box-shadow: 0 10px 30px rgba(16,24,40,.05); }
+.rl-explanation > div:first-child > p:last-child { color: #667085; line-height: 1.7; }
+.reward-system { display: grid; gap: 9px; }
+.reward-row { display: flex; justify-content: space-between; align-items: center; gap: 15px; padding: 13px 15px; border: 1px solid #eaecf0; border-radius: 10px; background: #f8fafc; }
+.reward-row span { color: #475467; font-size: 14px; }
+.reward-good { color: #15803d; }
+.reward-bad { color: #b42318; }
+.limitations-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-top: 55px; }
+.limitations-card, .limitations-grid .future-card { padding: 28px; background: #fff; border-radius: 18px; box-shadow: 0 10px 30px rgba(16,24,40,.05); }
+.limitations-card { border-top: 4px solid #f59e0b; }
+.limitations-grid .future-card { border-top: 4px solid #2563eb; }
+.limitations-card h2, .limitations-grid .future-card h2 { margin: 0; font-size: 23px; }
+.limitations-card ul, .limitations-grid .future-card ul { margin: 20px 0 0; padding-left: 20px; }
+.limitations-card li, .limitations-grid .future-card li { margin-bottom: 12px; color: #667085; line-height: 1.6; }
+.project-conclusion { margin-top: 55px; padding: 35px; border-radius: 20px; background: #172554; color: #fff; }
+.project-conclusion .section-label { color: #93c5fd; }
+.project-conclusion h2 { margin: 0; font-size: 27px; }
+.project-conclusion > p:last-child { max-width: 900px; margin: 15px 0 0; color: #dbeafe; line-height: 1.75; }
+
+@media (max-width: 1000px) {
+  .scenario-options { grid-template-columns: 1fr; }
+  .workflow { flex-direction: column; }
+  .workflow-arrow { transform: rotate(90deg); min-height: 25px; }
+}
+@media (max-width: 850px) {
+  .scenario-heading { flex-direction: column; }
+  .scenario-details, .problem-solution-grid, .rl-explanation, .limitations-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 550px) {
+  .scenario-section { padding: 20px; }
+  .scenario-details { grid-template-columns: 1fr; }
 }

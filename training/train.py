@@ -15,13 +15,47 @@ ACTION_NAMES = {
 
 def train_agent(
     episodes=1500,
-    max_steps_per_episode=100
+    max_steps_per_episode=100,
+    scenario="standard"
 ):
     """
-    Train the battery-aware Q-Learning agent.
+    Train the battery-aware Q-Learning agent
+    for the selected delivery scenario.
+
+    Available scenarios:
+        standard
+        urban
+        low_battery
     """
 
-    env = DroneEnvironment()
+    # Create the selected delivery environment
+    env = DroneEnvironment(
+        scenario=scenario
+    )
+
+    print("\n===================================")
+    print("      Q-LEARNING TRAINING")
+    print("===================================")
+
+    print(
+        f"Scenario: {env.scenario_name}"
+    )
+
+    print(
+        f"Battery Capacity: "
+        f"{env.max_battery}"
+    )
+
+    print(
+        f"Obstacles: "
+        f"{len(env.obstacles)}"
+    )
+
+    print(
+        f"Episodes: {episodes}"
+    )
+
+    print("===================================\n")
 
     agent = QLearningAgent(
         grid_size=env.grid_size,
@@ -41,15 +75,30 @@ def train_agent(
         total_reward = 0
         steps = 0
 
-        for step in range(max_steps_per_episode):
+        for step in range(
+            max_steps_per_episode
+        ):
 
+            # ----------------------------------------------
             # Agent chooses an action
-            action = agent.choose_action(state)
+            # ----------------------------------------------
 
+            action = agent.choose_action(
+                state
+            )
+
+            # ----------------------------------------------
             # Environment executes the action
-            next_state, reward, done = env.step(action)
+            # ----------------------------------------------
 
-            # Agent updates the Q-table
+            next_state, reward, done = (
+                env.step(action)
+            )
+
+            # ----------------------------------------------
+            # Agent learns from the experience
+            # ----------------------------------------------
+
             agent.update_q_value(
                 state,
                 action,
@@ -65,44 +114,71 @@ def train_agent(
 
             if done:
 
-                # Check whether the episode ended successfully
-                if env.drone_position == env.destination:
+                # Successful delivery
+                if (
+                    env.drone_position
+                    == env.destination
+                ):
                     successful_episodes += 1
 
-                # Otherwise, battery was depleted
+                # Battery depleted
                 elif env.battery <= 0:
                     battery_failures += 1
 
                 break
 
+        # Reduce exploration gradually
         agent.decay_epsilon()
 
-        rewards_per_episode.append(total_reward)
-        steps_per_episode.append(steps)
+        rewards_per_episode.append(
+            total_reward
+        )
 
-        if (episode + 1) % 100 == 0:
+        steps_per_episode.append(
+            steps
+        )
 
-            recent_rewards = rewards_per_episode[-100:]
+        if (
+            episode + 1
+        ) % 100 == 0:
+
+            recent_rewards = (
+                rewards_per_episode[-100:]
+            )
 
             average_reward = np.mean(
                 recent_rewards
             )
 
             print(
-                f"Episode {episode + 1}/{episodes} | "
-                f"Average Reward: {average_reward:.2f} | "
-                f"Epsilon: {agent.epsilon:.3f}"
+                f"Episode "
+                f"{episode + 1}/{episodes} | "
+                f"Average Reward: "
+                f"{average_reward:.2f} | "
+                f"Epsilon: "
+                f"{agent.epsilon:.3f}"
             )
 
+    # ------------------------------------------------------
+    # Training statistics
+    # ------------------------------------------------------
+
     success_rate = (
-        successful_episodes / episodes
+        successful_episodes
+        / episodes
     ) * 100
 
     battery_failure_rate = (
-        battery_failures / episodes
+        battery_failures
+        / episodes
     ) * 100
 
     print("\nTraining completed.")
+
+    print(
+        f"Scenario: "
+        f"{env.scenario_name}"
+    )
 
     print(
         f"Training Success Rate: "
@@ -112,6 +188,18 @@ def train_agent(
     print(
         f"Battery Failure Rate: "
         f"{battery_failure_rate:.2f}%"
+    )
+
+    # Store statistics on the environment.
+    # This allows the API to retrieve them later
+    # without changing the existing return structure.
+
+    env.training_success_rate = (
+        success_rate
+    )
+
+    env.battery_failure_rate = (
+        battery_failure_rate
     )
 
     return (
@@ -128,27 +216,41 @@ def evaluate_agent(
     max_steps=50
 ):
     """
-    Evaluate the trained battery-aware agent
-    using exploitation only.
+    Evaluate the trained battery-aware
+    Q-Learning agent using exploitation only.
     """
 
     state = env.reset()
 
-    # Store only positions for route visualization
-    route = [env.drone_position]
+    # Store positions for route visualization
+    route = [
+        env.drone_position
+    ]
 
     actions_taken = []
 
     total_reward = 0
 
-    print("\n=== Battery-Aware Route Evaluation ===")
+    print(
+        "\n=== Battery-Aware "
+        "Route Evaluation ==="
+    )
+
+    print(
+        f"Scenario: "
+        f"{env.scenario_name}"
+    )
 
     for step in range(max_steps):
 
         row, col, battery = state
 
-        # Exploitation only:
-        # choose the action with the highest learned Q-value
+        # ----------------------------------------------
+        # Exploitation only
+        # ----------------------------------------------
+        # Select the action with the highest
+        # learned Q-value.
+
         action = int(
             np.argmax(
                 agent.q_table[
@@ -159,15 +261,15 @@ def evaluate_agent(
             )
         )
 
-        next_state, reward, done = env.step(
-            action
+        next_state, reward, done = (
+            env.step(action)
         )
 
         actions_taken.append(
             ACTION_NAMES[action]
         )
 
-        # Save only the position part
+        # Save only the drone position
         route.append(
             env.drone_position
         )
@@ -184,6 +286,11 @@ def evaluate_agent(
         == env.destination
     )
 
+    battery_used = (
+        env.max_battery
+        - env.battery
+    )
+
     print("\nRoute:")
 
     for position in route:
@@ -192,11 +299,20 @@ def evaluate_agent(
     print("\nActions:")
 
     print(
-        " -> ".join(actions_taken)
+        " -> ".join(
+            actions_taken
+        )
     )
 
-    print("\nSteps:", len(actions_taken))
-    print("Total Reward:", total_reward)
+    print(
+        "\nSteps:",
+        len(actions_taken)
+    )
+
+    print(
+        "Total Reward:",
+        total_reward
+    )
 
     print(
         "Battery Remaining:",
@@ -205,7 +321,7 @@ def evaluate_agent(
 
     print(
         "Battery Used:",
-        env.max_battery - env.battery
+        battery_used
     )
 
     print(
@@ -214,6 +330,7 @@ def evaluate_agent(
     )
 
     print("\nFinal Environment:")
+
     env.render()
 
     return (
@@ -225,11 +342,26 @@ def evaluate_agent(
 
 if __name__ == "__main__":
 
-    env, agent, rewards, steps = train_agent()
+    # Running this file directly uses the
+    # standard delivery scenario.
+    #
+    # Other available scenarios:
+    #     "urban"
+    #     "low_battery"
 
-    route, actions, total_reward = evaluate_agent(
-        env,
-        agent
+    selected_scenario = "standard"
+
+    env, agent, rewards, steps = (
+        train_agent(
+            scenario=selected_scenario
+        )
+    )
+
+    route, actions, total_reward = (
+        evaluate_agent(
+            env,
+            agent
+        )
     )
 
     visualize_training(
