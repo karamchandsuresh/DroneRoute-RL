@@ -12,46 +12,82 @@ class DQNetwork(nn.Module):
     Neural network used to approximate Q-values.
 
     Input:
-        [row, column, battery]
+
+        [
+            row,
+            column,
+            battery,
+            blocked_up,
+            blocked_down,
+            blocked_left,
+            blocked_right
+        ]
 
     Output:
-        Q-value for each action:
-        [UP, DOWN, LEFT, RIGHT]
+
+        [
+            Q(UP),
+            Q(DOWN),
+            Q(LEFT),
+            Q(RIGHT)
+        ]
     """
 
     def __init__(
         self,
-        state_size=3,
-        action_size=4
+        state_size=7,
+        action_size=4,
     ):
         super().__init__()
 
         self.network = nn.Sequential(
-            nn.Linear(state_size, 64),
+
+            nn.Linear(
+                state_size,
+                64,
+            ),
+
             nn.ReLU(),
 
-            nn.Linear(64, 64),
+            nn.Linear(
+                64,
+                64,
+            ),
+
             nn.ReLU(),
 
-            nn.Linear(64, action_size)
+            nn.Linear(
+                64,
+                action_size,
+            ),
         )
 
-    def forward(self, state):
+    def forward(
+        self,
+        state,
+    ):
         """
-        Perform a forward pass through the network.
+        Perform forward propagation.
         """
-        return self.network(state)
+
+        return self.network(
+            state
+        )
 
 
 class DQNAgent:
     """
-    Deep Q-Network agent for DroneRoute RL.
+    Dynamic-obstacle-aware and
+    battery-aware DQN agent.
 
     Uses:
-    - Neural-network Q-value approximation
+
+    - Neural-network Q approximation
     - Experience replay
     - Target network
     - Epsilon-greedy exploration
+    - Adam optimizer
+    - State normalization
     """
 
     def __init__(
@@ -65,122 +101,259 @@ class DQNAgent:
         epsilon_decay=0.995,
         min_epsilon=0.01,
         replay_capacity=10000,
-        batch_size=64
+        batch_size=64,
     ):
         self.grid_size = grid_size
-        self.max_battery = max_battery
 
-        self.state_size = 3
-        self.action_size = action_size
+        self.max_battery = (
+            max_battery
+        )
 
-        self.learning_rate = learning_rate
-        self.discount_factor = discount_factor
+        # --------------------------------------------------
+        # State:
+        #
+        # row
+        # column
+        # battery
+        # blocked_up
+        # blocked_down
+        # blocked_left
+        # blocked_right
+        # --------------------------------------------------
+
+        self.state_size = 7
+
+        self.action_size = (
+            action_size
+        )
+
+        # --------------------------------------------------
+        # Hyperparameters
+        # --------------------------------------------------
+
+        self.learning_rate = (
+            learning_rate
+        )
+
+        self.discount_factor = (
+            discount_factor
+        )
 
         self.epsilon = epsilon
-        self.epsilon_decay = epsilon_decay
-        self.min_epsilon = min_epsilon
 
-        self.batch_size = batch_size
+        self.epsilon_decay = (
+            epsilon_decay
+        )
 
-        # CPU/GPU selection
+        self.min_epsilon = (
+            min_epsilon
+        )
+
+        self.batch_size = (
+            batch_size
+        )
+
+        # --------------------------------------------------
+        # Device
+        # --------------------------------------------------
+
         self.device = torch.device(
             "cuda"
             if torch.cuda.is_available()
             else "cpu"
         )
 
-        # Main network
-        self.policy_network = DQNetwork(
-            state_size=self.state_size,
-            action_size=self.action_size
-        ).to(self.device)
+        # --------------------------------------------------
+        # Policy network
+        # --------------------------------------------------
 
+        self.policy_network = (
+            DQNetwork(
+                state_size=(
+                    self.state_size
+                ),
+                action_size=(
+                    self.action_size
+                ),
+            )
+            .to(
+                self.device
+            )
+        )
+
+        # --------------------------------------------------
         # Target network
-        self.target_network = DQNetwork(
-            state_size=self.state_size,
-            action_size=self.action_size
-        ).to(self.device)
+        # --------------------------------------------------
 
-        # Initially both networks have identical weights
+        self.target_network = (
+            DQNetwork(
+                state_size=(
+                    self.state_size
+                ),
+                action_size=(
+                    self.action_size
+                ),
+            )
+            .to(
+                self.device
+            )
+        )
+
         self.target_network.load_state_dict(
             self.policy_network.state_dict()
         )
 
         self.target_network.eval()
 
+        # --------------------------------------------------
         # Adam optimizer
+        # --------------------------------------------------
+
         self.optimizer = optim.Adam(
             self.policy_network.parameters(),
-            lr=self.learning_rate
+            lr=self.learning_rate,
         )
 
-        # Mean Squared Error loss
-        self.loss_function = nn.MSELoss()
+        # --------------------------------------------------
+        # Loss function
+        # --------------------------------------------------
 
-        # Experience replay memory
+        self.loss_function = (
+            nn.MSELoss()
+        )
+
+        # --------------------------------------------------
+        # Replay memory
+        # --------------------------------------------------
+
         self.memory = deque(
             maxlen=replay_capacity
         )
 
-    def normalize_state(self, state):
+    # ==================================================
+    # STATE NORMALIZATION
+    # ==================================================
+
+    def normalize_state(
+        self,
+        state,
+    ):
         """
-        Normalize the state values before feeding
-        them into the neural network.
+        Normalize the obstacle-aware state.
 
-        Original:
-            (row, column, battery)
+        Position and battery are scaled
+        approximately between 0 and 1.
 
-        Normalized approximately to:
-            0.0 - 1.0
+        Blocked direction values are already
+        binary and remain 0 or 1.
         """
 
-        row, col, battery = state
+        (
+            row,
+            col,
+            battery,
+            blocked_up,
+            blocked_down,
+            blocked_left,
+            blocked_right,
+        ) = state
 
         normalized_state = np.array(
             [
-                row / (self.grid_size - 1),
-                col / (self.grid_size - 1),
-                battery / self.max_battery
+                row
+                / (
+                    self.grid_size
+                    - 1
+                ),
+
+                col
+                / (
+                    self.grid_size
+                    - 1
+                ),
+
+                battery
+                / self.max_battery,
+
+                float(
+                    blocked_up
+                ),
+
+                float(
+                    blocked_down
+                ),
+
+                float(
+                    blocked_left
+                ),
+
+                float(
+                    blocked_right
+                ),
             ],
-            dtype=np.float32
+            dtype=np.float32,
         )
 
         return normalized_state
 
-    def choose_action(self, state):
+    # ==================================================
+    # ACTION SELECTION
+    # ==================================================
+
+    def choose_action(
+        self,
+        state,
+    ):
         """
-        Select an action using epsilon-greedy strategy.
+        Select action using epsilon-greedy
+        exploration.
         """
 
         # Exploration
-        if random.random() < self.epsilon:
+
+        if (
+            random.random()
+            < self.epsilon
+        ):
+
             return random.randrange(
                 self.action_size
             )
 
         # Exploitation
-        normalized_state = self.normalize_state(
-            state
+
+        normalized_state = (
+            self.normalize_state(
+                state
+            )
         )
 
         state_tensor = torch.tensor(
             normalized_state,
             dtype=torch.float32,
-            device=self.device
-        ).unsqueeze(0)
+            device=self.device,
+        ).unsqueeze(
+            0
+        )
 
         with torch.no_grad():
 
-            q_values = self.policy_network(
-                state_tensor
+            q_values = (
+                self.policy_network(
+                    state_tensor
+                )
             )
 
         return int(
             torch.argmax(
                 q_values,
-                dim=1
+                dim=1,
             ).item()
         )
+
+    # ==================================================
+    # EXPERIENCE MEMORY
+    # ==================================================
 
     def remember(
         self,
@@ -188,10 +361,11 @@ class DQNAgent:
         action,
         reward,
         next_state,
-        done
+        done,
     ):
         """
-        Store one experience in replay memory.
+        Store one transition in
+        replay memory.
         """
 
         self.memory.append(
@@ -200,22 +374,29 @@ class DQNAgent:
                 action,
                 reward,
                 next_state,
-                done
+                done,
             )
         )
 
+    # ==================================================
+    # EXPERIENCE REPLAY
+    # ==================================================
+
     def replay(self):
         """
-        Train the policy network using a random
-        batch sampled from replay memory.
+        Train the policy network using
+        randomly sampled experiences.
         """
 
-        if len(self.memory) < self.batch_size:
+        if (
+            len(self.memory)
+            < self.batch_size
+        ):
             return None
 
         batch = random.sample(
             self.memory,
-            self.batch_size
+            self.batch_size,
         )
 
         states = []
@@ -229,81 +410,130 @@ class DQNAgent:
             action,
             reward,
             next_state,
-            done
+            done,
         ) in batch:
 
             states.append(
-                self.normalize_state(state)
+                self.normalize_state(
+                    state
+                )
             )
 
-            actions.append(action)
-            rewards.append(reward)
+            actions.append(
+                action
+            )
+
+            rewards.append(
+                reward
+            )
 
             next_states.append(
-                self.normalize_state(next_state)
+                self.normalize_state(
+                    next_state
+                )
             )
 
-            dones.append(done)
+            dones.append(
+                done
+            )
+
+        # --------------------------------------------------
+        # Convert to tensors
+        # --------------------------------------------------
 
         states = torch.tensor(
-            np.array(states),
+            np.array(
+                states
+            ),
             dtype=torch.float32,
-            device=self.device
+            device=self.device,
         )
 
         actions = torch.tensor(
             actions,
             dtype=torch.long,
-            device=self.device
-        ).unsqueeze(1)
+            device=self.device,
+        ).unsqueeze(
+            1
+        )
 
         rewards = torch.tensor(
             rewards,
             dtype=torch.float32,
-            device=self.device
+            device=self.device,
         )
 
         next_states = torch.tensor(
-            np.array(next_states),
+            np.array(
+                next_states
+            ),
             dtype=torch.float32,
-            device=self.device
+            device=self.device,
         )
 
         dones = torch.tensor(
             dones,
             dtype=torch.float32,
-            device=self.device
+            device=self.device,
         )
 
-        # Q-values predicted by policy network
+        # --------------------------------------------------
+        # Current Q-values
+        # --------------------------------------------------
+
         current_q_values = (
-            self.policy_network(states)
-            .gather(1, actions)
-            .squeeze(1)
+            self.policy_network(
+                states
+            )
+            .gather(
+                1,
+                actions,
+            )
+            .squeeze(
+                1
+            )
         )
 
-        # Q-values for next states from target network
+        # --------------------------------------------------
+        # Target Q-values
+        # --------------------------------------------------
+
         with torch.no_grad():
 
             next_q_values = (
-                self.target_network(next_states)
-                .max(dim=1)[0]
+                self.target_network(
+                    next_states
+                )
+                .max(
+                    dim=1
+                )[0]
             )
 
             target_q_values = (
                 rewards
                 + self.discount_factor
                 * next_q_values
-                * (1 - dones)
+                * (
+                    1
+                    - dones
+                )
             )
 
-        # Calculate training loss
-        loss = self.loss_function(
-            current_q_values,
-            target_q_values
+        # --------------------------------------------------
+        # Calculate loss
+        # --------------------------------------------------
+
+        loss = (
+            self.loss_function(
+                current_q_values,
+                target_q_values,
+            )
         )
 
-        # Neural-network update
+        # --------------------------------------------------
+        # Neural network update
+        # --------------------------------------------------
+
         self.optimizer.zero_grad()
 
         loss.backward()
@@ -312,17 +542,29 @@ class DQNAgent:
 
         return loss.item()
 
-    def update_target_network(self):
+    # ==================================================
+    # TARGET NETWORK
+    # ==================================================
+
+    def update_target_network(
+        self,
+    ):
         """
-        Copy policy-network weights to
-        the target network.
+        Copy policy network parameters
+        into target network.
         """
 
         self.target_network.load_state_dict(
             self.policy_network.state_dict()
         )
 
-    def decay_epsilon(self):
+    # ==================================================
+    # EPSILON DECAY
+    # ==================================================
+
+    def decay_epsilon(
+        self,
+    ):
         """
         Gradually reduce exploration.
         """
@@ -330,5 +572,5 @@ class DQNAgent:
         self.epsilon = max(
             self.min_epsilon,
             self.epsilon
-            * self.epsilon_decay
+            * self.epsilon_decay,
         )

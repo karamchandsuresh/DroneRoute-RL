@@ -1,44 +1,77 @@
 import numpy as np
 
-from environment.drone_env import DroneEnvironment
-from agent.q_learning import QLearningAgent
-from visualization.visualize import visualize_training
+from environment.drone_env import (
+    DroneEnvironment
+)
+
+from agent.q_learning import (
+    QLearningAgent
+)
+
+from visualization.visualize import (
+    visualize_training
+)
 
 
 ACTION_NAMES = {
     0: "UP",
     1: "DOWN",
     2: "LEFT",
-    3: "RIGHT"
+    3: "RIGHT",
 }
 
 
 def train_agent(
-    episodes=1500,
+    episodes=5000,
     max_steps_per_episode=100,
-    scenario="standard"
+    scenario="standard",
 ):
     """
-    Train the battery-aware Q-Learning agent
-    for the selected delivery scenario.
+    Train dynamic obstacle-aware Q-Learning.
 
-    Available scenarios:
-        standard
-        urban
-        low_battery
+    A new valid obstacle configuration is
+    generated for every training episode.
+
+    The agent learns using:
+    - position
+    - battery level
+    - obstacle/boundary information
+
+    Collision is treated as a severe,
+    mission-ending failure.
     """
 
-    # Create the selected delivery environment
     env = DroneEnvironment(
         scenario=scenario
     )
 
-    print("\n===================================")
-    print("      Q-LEARNING TRAINING")
-    print("===================================")
+    agent = QLearningAgent(
+        grid_size=env.grid_size,
+        max_battery=env.max_battery,
+    )
+
+    rewards_per_episode = []
+    steps_per_episode = []
+
+    successful_episodes = 0
+    battery_failures = 0
+    collision_failures = 0
 
     print(
-        f"Scenario: {env.scenario_name}"
+        "\n==================================="
+    )
+
+    print(
+        "      DYNAMIC Q-LEARNING"
+    )
+
+    print(
+        "==================================="
+    )
+
+    print(
+        f"Scenario: "
+        f"{env.scenario_name}"
     )
 
     print(
@@ -47,64 +80,71 @@ def train_agent(
     )
 
     print(
-        f"Obstacles: "
-        f"{len(env.obstacles)}"
+        f"Dynamic Obstacles: "
+        f"{env.obstacle_count}"
     )
 
     print(
         f"Episodes: {episodes}"
     )
 
-    print("===================================\n")
-
-    agent = QLearningAgent(
-        grid_size=env.grid_size,
-        max_battery=env.max_battery
+    print(
+        "Obstacle positions change "
+        "every episode."
     )
 
-    rewards_per_episode = []
-    steps_per_episode = []
+    print(
+        "Collision Penalty: -50 "
+        "(mission terminating)"
+    )
 
-    successful_episodes = 0
-    battery_failures = 0
+    print(
+        "===================================\n"
+    )
 
-    for episode in range(episodes):
+    for episode in range(
+        episodes
+    ):
 
-        state = env.reset()
+        # --------------------------------------------------
+        # Generate a new obstacle configuration
+        # --------------------------------------------------
+
+        state = env.reset(
+            regenerate_obstacles=True
+        )
 
         total_reward = 0
         steps = 0
 
-        for step in range(
+        for _ in range(
             max_steps_per_episode
         ):
 
-            # ----------------------------------------------
-            # Agent chooses an action
-            # ----------------------------------------------
-
-            action = agent.choose_action(
-                state
+            action = (
+                agent.choose_action(
+                    state
+                )
             )
 
-            # ----------------------------------------------
-            # Environment executes the action
-            # ----------------------------------------------
-
-            next_state, reward, done = (
-                env.step(action)
+            (
+                next_state,
+                reward,
+                done,
+            ) = env.step(
+                action
             )
 
-            # ----------------------------------------------
-            # Agent learns from the experience
-            # ----------------------------------------------
+            # --------------------------------------------------
+            # Learn from transition
+            # --------------------------------------------------
 
             agent.update_q_value(
                 state,
                 action,
                 reward,
                 next_state,
-                done
+                done,
             )
 
             state = next_state
@@ -112,22 +152,34 @@ def train_agent(
             total_reward += reward
             steps += 1
 
+            # --------------------------------------------------
+            # Terminal-state classification
+            # --------------------------------------------------
+
             if done:
 
-                # Successful delivery
                 if (
                     env.drone_position
                     == env.destination
                 ):
                     successful_episodes += 1
 
-                # Battery depleted
-                elif env.battery <= 0:
+                elif (
+                    env.battery <= 0
+                ):
                     battery_failures += 1
+
+                else:
+                    # The only remaining terminal
+                    # condition is obstacle collision.
+                    collision_failures += 1
 
                 break
 
-        # Reduce exploration gradually
+        # --------------------------------------------------
+        # Exploration decay
+        # --------------------------------------------------
+
         agent.decay_epsilon()
 
         rewards_per_episode.append(
@@ -138,16 +190,36 @@ def train_agent(
             steps
         )
 
+        # --------------------------------------------------
+        # Progress
+        # --------------------------------------------------
+
         if (
             episode + 1
         ) % 100 == 0:
 
             recent_rewards = (
-                rewards_per_episode[-100:]
+                rewards_per_episode[
+                    -100:
+                ]
             )
 
-            average_reward = np.mean(
-                recent_rewards
+            recent_steps = (
+                steps_per_episode[
+                    -100:
+                ]
+            )
+
+            average_reward = (
+                np.mean(
+                    recent_rewards
+                )
+            )
+
+            average_steps = (
+                np.mean(
+                    recent_steps
+                )
             )
 
             print(
@@ -155,13 +227,15 @@ def train_agent(
                 f"{episode + 1}/{episodes} | "
                 f"Average Reward: "
                 f"{average_reward:.2f} | "
+                f"Average Steps: "
+                f"{average_steps:.2f} | "
                 f"Epsilon: "
                 f"{agent.epsilon:.3f}"
             )
 
-    # ------------------------------------------------------
-    # Training statistics
-    # ------------------------------------------------------
+    # ==================================================
+    # TRAINING STATISTICS
+    # ==================================================
 
     success_rate = (
         successful_episodes
@@ -173,11 +247,13 @@ def train_agent(
         / episodes
     ) * 100
 
-    print("\nTraining completed.")
+    collision_failure_rate = (
+        collision_failures
+        / episodes
+    ) * 100
 
     print(
-        f"Scenario: "
-        f"{env.scenario_name}"
+        "\nTraining completed."
     )
 
     print(
@@ -186,16 +262,23 @@ def train_agent(
     )
 
     print(
+        f"Collision Failure Rate: "
+        f"{collision_failure_rate:.2f}%"
+    )
+
+    print(
         f"Battery Failure Rate: "
         f"{battery_failure_rate:.2f}%"
     )
 
-    # Store statistics on the environment.
-    # This allows the API to retrieve them later
-    # without changing the existing return structure.
-
+    # Store statistics so that the
+    # FastAPI backend can expose them.
     env.training_success_rate = (
         success_rate
+    )
+
+    env.collision_failure_rate = (
+        collision_failure_rate
     )
 
     env.battery_failure_rate = (
@@ -206,23 +289,42 @@ def train_agent(
         env,
         agent,
         rewards_per_episode,
-        steps_per_episode
+        steps_per_episode,
     )
 
 
 def evaluate_agent(
     env,
     agent,
-    max_steps=50
+    max_steps=50,
+    new_environment=True,
 ):
     """
-    Evaluate the trained battery-aware
-    Q-Learning agent using exploitation only.
+    Evaluate Q-Learning using exploitation only.
+
+    By default, a completely new dynamic obstacle
+    configuration is generated for evaluation.
+
+    The obstacle configuration remains fixed
+    during this single evaluation route.
     """
 
-    state = env.reset()
+    state = env.reset(
+        regenerate_obstacles=(
+            new_environment
+        )
+    )
 
-    # Store positions for route visualization
+    evaluation_obstacles = list(
+        env.obstacles
+    )
+
+    shortest_possible_steps = (
+        env._shortest_path_length(
+            env.obstacles
+        )
+    )
+
     route = [
         env.drone_position
     ]
@@ -231,9 +333,20 @@ def evaluate_agent(
 
     total_reward = 0
 
+    termination_reason = (
+        "maximum_steps"
+    )
+
     print(
-        "\n=== Battery-Aware "
-        "Route Evaluation ==="
+        "\n==================================="
+    )
+
+    print(
+        "   DYNAMIC Q-LEARNING EVALUATION"
+    )
+
+    print(
+        "==================================="
     )
 
     print(
@@ -241,44 +354,80 @@ def evaluate_agent(
         f"{env.scenario_name}"
     )
 
-    for step in range(max_steps):
+    print(
+        f"Evaluation Obstacles: "
+        f"{evaluation_obstacles}"
+    )
 
-        row, col, battery = state
+    print(
+        f"Shortest Possible Steps: "
+        f"{shortest_possible_steps}"
+    )
 
-        # ----------------------------------------------
-        # Exploitation only
-        # ----------------------------------------------
-        # Select the action with the highest
-        # learned Q-value.
+    for _ in range(
+        max_steps
+    ):
+
+        state_index = (
+            agent._state_index(
+                state
+            )
+        )
 
         action = int(
             np.argmax(
                 agent.q_table[
-                    row,
-                    col,
-                    battery
+                    state_index
                 ]
             )
         )
 
-        next_state, reward, done = (
-            env.step(action)
+        (
+            next_state,
+            reward,
+            done,
+        ) = env.step(
+            action
         )
 
         actions_taken.append(
-            ACTION_NAMES[action]
+            ACTION_NAMES[
+                action
+            ]
         )
 
-        # Save only the drone position
         route.append(
             env.drone_position
         )
 
-        total_reward += reward
+        total_reward += (
+            reward
+        )
 
         state = next_state
 
         if done:
+
+            if (
+                env.drone_position
+                == env.destination
+            ):
+                termination_reason = (
+                    "successful_delivery"
+                )
+
+            elif (
+                env.battery <= 0
+            ):
+                termination_reason = (
+                    "battery_depleted"
+                )
+
+            else:
+                termination_reason = (
+                    "obstacle_collision"
+                )
+
             break
 
     destination_reached = (
@@ -291,12 +440,34 @@ def evaluate_agent(
         - env.battery
     )
 
-    print("\nRoute:")
+    actual_steps = len(
+        actions_taken
+    )
+
+    extra_steps = None
+
+    if (
+        destination_reached
+        and shortest_possible_steps
+        is not None
+    ):
+        extra_steps = (
+            actual_steps
+            - shortest_possible_steps
+        )
+
+    print(
+        "\nRoute:"
+    )
 
     for position in route:
-        print(position)
+        print(
+            position
+        )
 
-    print("\nActions:")
+    print(
+        "\nActions:"
+    )
 
     print(
         " -> ".join(
@@ -306,7 +477,17 @@ def evaluate_agent(
 
     print(
         "\nSteps:",
-        len(actions_taken)
+        actual_steps
+    )
+
+    print(
+        "Shortest Possible Steps:",
+        shortest_possible_steps
+    )
+
+    print(
+        "Extra Steps:",
+        extra_steps
     )
 
     print(
@@ -329,44 +510,54 @@ def evaluate_agent(
         destination_reached
     )
 
-    print("\nFinal Environment:")
+    print(
+        "Termination Reason:",
+        termination_reason
+    )
+
+    print(
+        "\nFinal Environment:"
+    )
 
     env.render()
 
     return (
         route,
         actions_taken,
-        total_reward
+        total_reward,
     )
 
 
 if __name__ == "__main__":
 
-    # Running this file directly uses the
-    # standard delivery scenario.
-    #
-    # Other available scenarios:
-    #     "urban"
-    #     "low_battery"
-
-    selected_scenario = "standard"
-
-    env, agent, rewards, steps = (
-        train_agent(
-            scenario=selected_scenario
-        )
+    selected_scenario = (
+        "standard"
     )
 
-    route, actions, total_reward = (
-        evaluate_agent(
-            env,
-            agent
-        )
+    (
+        env,
+        agent,
+        rewards,
+        steps,
+    ) = train_agent(
+        episodes=5000,
+        scenario=(
+            selected_scenario
+        ),
+    )
+
+    (
+        route,
+        actions,
+        total_reward,
+    ) = evaluate_agent(
+        env,
+        agent,
     )
 
     visualize_training(
         env,
         rewards,
         steps,
-        route
+        route,
     )

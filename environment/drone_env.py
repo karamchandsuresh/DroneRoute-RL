@@ -1,70 +1,77 @@
+import random
+from collections import deque
+
+
 class DroneEnvironment:
     """
-    Scenario-based, battery-aware grid environment for DroneRoute RL.
+    Dynamic, scenario-based and battery-aware
+    environment for DroneRoute RL.
 
-    The drone must reach the delivery destination while:
-    - avoiding obstacles and restricted zones,
-    - staying inside the permitted operating area,
-    - minimizing unnecessary movement,
-    - and completing the delivery before its battery is depleted.
+    Obstacles change between episodes.
 
-    Available scenarios:
-    - standard: Normal last-mile delivery
-    - urban: Delivery through a more restricted urban environment
-    - low_battery: Energy-constrained delivery
+    The environment guarantees:
+    - Start is never blocked.
+    - Destination is never blocked.
+    - Obstacle count matches the scenario.
+    - At least one valid route exists.
+    - The generated route is feasible for
+      the available battery.
+
+    State:
+        (
+            row,
+            column,
+            battery,
+            blocked_up,
+            blocked_down,
+            blocked_left,
+            blocked_right
+        )
+
+    blocked direction:
+        0 = free
+        1 = obstacle or boundary
     """
 
     SCENARIOS = {
         "standard": {
             "name": "Standard Delivery",
             "description": (
-                "Normal last-mile drone delivery with a moderate "
-                "number of obstacles."
+                "Normal last-mile drone delivery with "
+                "dynamically positioned obstacles."
             ),
             "max_battery": 20,
-            "obstacles": [
-                (1, 1),
-                (2, 2),
-                (3, 1)
-            ]
+            "obstacle_count": 3,
         },
 
         "urban": {
             "name": "Urban Restricted-Zone Delivery",
             "description": (
                 "Drone delivery through an urban environment "
-                "containing additional buildings and restricted zones."
+                "with additional dynamically positioned "
+                "buildings and restricted zones."
             ),
             "max_battery": 20,
-            "obstacles": [
-                (1, 1),
-                (1, 3),
-                (2, 1),
-                (2, 3),
-                (3, 3)
-            ]
+            "obstacle_count": 5,
         },
 
         "low_battery": {
             "name": "Low-Battery Delivery",
             "description": (
-                "Energy-constrained delivery where the drone must "
-                "reach the customer using a limited battery supply."
+                "Energy-constrained delivery with dynamically "
+                "positioned obstacles and limited battery."
             ),
             "max_battery": 10,
-            "obstacles": [
-                (1, 1),
-                (2, 2),
-                (3, 1)
-            ]
-        }
+            "obstacle_count": 3,
+        },
     }
 
     def __init__(
         self,
         grid_size=5,
         max_battery=None,
-        scenario="standard"
+        scenario="standard",
+        seed=None,
     ):
         self.grid_size = grid_size
 
@@ -76,11 +83,20 @@ class DroneEnvironment:
 
         self.scenario = scenario
 
-        scenario_config = self.SCENARIOS[scenario]
+        scenario_config = self.SCENARIOS[
+            scenario
+        ]
 
-        self.scenario_name = scenario_config["name"]
+        self.scenario_name = (
+            scenario_config["name"]
+        )
+
         self.scenario_description = (
             scenario_config["description"]
+        )
+
+        self.obstacle_count = (
+            scenario_config["obstacle_count"]
         )
 
         # --------------------------------------------------
@@ -91,24 +107,13 @@ class DroneEnvironment:
 
         self.destination = (
             grid_size - 1,
-            grid_size - 1
+            grid_size - 1,
         )
 
         # --------------------------------------------------
-        # Scenario-specific obstacles
+        # Battery
         # --------------------------------------------------
 
-        self.obstacles = list(
-            scenario_config["obstacles"]
-        )
-
-        # --------------------------------------------------
-        # Scenario-specific battery
-        # --------------------------------------------------
-
-        # max_battery can still be manually supplied so that
-        # older code using DroneEnvironment(max_battery=...)
-        # remains compatible.
         if max_battery is None:
             self.max_battery = (
                 scenario_config["max_battery"]
@@ -117,14 +122,15 @@ class DroneEnvironment:
             self.max_battery = max_battery
 
         # --------------------------------------------------
-        # Current environment state
+        # Random generator
         # --------------------------------------------------
 
-        self.drone_position = self.start_position
-        self.battery = self.max_battery
+        self.random = random.Random(
+            seed
+        )
 
         # --------------------------------------------------
-        # Action space
+        # Actions
         # --------------------------------------------------
         # 0 = UP
         # 1 = DOWN
@@ -135,106 +141,403 @@ class DroneEnvironment:
             0: (-1, 0),
             1: (1, 0),
             2: (0, -1),
-            3: (0, 1)
+            3: (0, 1),
         }
+
+        # --------------------------------------------------
+        # Initial dynamic environment
+        # --------------------------------------------------
+
+        self.obstacles = (
+            self._generate_valid_obstacles()
+        )
+
+        self.drone_position = (
+            self.start_position
+        )
+
+        self.battery = (
+            self.max_battery
+        )
+
+    # ==================================================
+    # STATE
+    # ==================================================
 
     def get_state(self):
         """
-        Return the current RL state.
-
-        State:
-            (row, column, battery)
+        Return obstacle-aware RL state.
         """
 
-        row, col = self.drone_position
+        row, col = (
+            self.drone_position
+        )
+
+        blocked_directions = []
+
+        for action in range(4):
+
+            (
+                row_change,
+                col_change,
+            ) = self.actions[action]
+
+            next_position = (
+                row + row_change,
+                col + col_change,
+            )
+
+            blocked = (
+                not self._is_inside_grid(
+                    next_position
+                )
+                or next_position
+                in self.obstacles
+            )
+
+            blocked_directions.append(
+                int(blocked)
+            )
 
         return (
             row,
             col,
-            self.battery
+            self.battery,
+            blocked_directions[0],
+            blocked_directions[1],
+            blocked_directions[2],
+            blocked_directions[3],
         )
+
+    # ==================================================
+    # SCENARIO INFORMATION
+    # ==================================================
 
     def get_scenario_info(self):
         """
-        Return information about the active delivery scenario.
-
-        This is useful for the FastAPI backend and frontend.
+        Return information about the
+        current generated environment.
         """
+
+        shortest_path = (
+            self._shortest_path_length(
+                self.obstacles
+            )
+        )
 
         return {
             "scenario": self.scenario,
             "name": self.scenario_name,
-            "description": self.scenario_description,
+            "description": (
+                self.scenario_description
+            ),
             "grid_size": self.grid_size,
-            "start": list(self.start_position),
-            "destination": list(self.destination),
+            "start": list(
+                self.start_position
+            ),
+            "destination": list(
+                self.destination
+            ),
+            "obstacle_count": (
+                self.obstacle_count
+            ),
             "obstacles": [
                 list(obstacle)
-                for obstacle in self.obstacles
+                for obstacle
+                in self.obstacles
             ],
-            "max_battery": self.max_battery
+            "max_battery": (
+                self.max_battery
+            ),
+            "dynamic_obstacles": True,
+            "shortest_possible_steps": (
+                shortest_path
+            ),
         }
 
-    def reset(self):
+    # ==================================================
+    # RESET
+    # ==================================================
+
+    def reset(
+        self,
+        regenerate_obstacles=True,
+    ):
         """
-        Reset the environment for a new episode.
+        Reset the environment.
+
+        During training:
+            regenerate_obstacles=True
+
+        During one evaluation route:
+            regenerate_obstacles=False
         """
 
-        self.drone_position = self.start_position
-        self.battery = self.max_battery
+        if regenerate_obstacles:
+
+            self.obstacles = (
+                self._generate_valid_obstacles()
+            )
+
+        self.drone_position = (
+            self.start_position
+        )
+
+        self.battery = (
+            self.max_battery
+        )
 
         return self.get_state()
 
-    def step(self, action):
+    # ==================================================
+    # DYNAMIC OBSTACLE GENERATION
+    # ==================================================
+
+    def _generate_valid_obstacles(
+        self,
+        max_attempts=2000,
+    ):
         """
-        Execute one action in the environment.
+        Generate a random obstacle layout.
 
-        Every attempted action consumes one battery unit.
+        A layout is accepted only when:
+        - a route exists,
+        - and the route can be completed with
+          the available battery.
+        """
 
-        Reward system:
-            Normal movement       = -1
-            Boundary violation    = -10
-            Obstacle collision    = -20
-            Battery depletion     = -50
-            Successful delivery   = +100
+        available_cells = []
 
-        Returns:
-            next_state:
-                (row, column, battery)
+        for row in range(
+            self.grid_size
+        ):
 
-            reward:
-                Reward or penalty received.
+            for col in range(
+                self.grid_size
+            ):
 
-            done:
-                True when the episode has finished.
+                position = (
+                    row,
+                    col,
+                )
+
+                if (
+                    position
+                    != self.start_position
+                    and position
+                    != self.destination
+                ):
+
+                    available_cells.append(
+                        position
+                    )
+
+        if (
+            self.obstacle_count
+            > len(available_cells)
+        ):
+
+            raise ValueError(
+                "Obstacle count exceeds "
+                "available cells."
+            )
+
+        for _ in range(
+            max_attempts
+        ):
+
+            candidate_obstacles = (
+                self.random.sample(
+                    available_cells,
+                    self.obstacle_count,
+                )
+            )
+
+            shortest_steps = (
+                self._shortest_path_length(
+                    candidate_obstacles
+                )
+            )
+
+            # No valid path
+            if shortest_steps is None:
+                continue
+
+            # Every attempted action consumes one
+            # battery unit. Make sure the shortest
+            # feasible route fits within battery.
+            if (
+                shortest_steps
+                < self.max_battery
+            ):
+
+                return (
+                    candidate_obstacles
+                )
+
+        raise RuntimeError(
+            "Unable to generate a valid "
+            "battery-feasible obstacle layout."
+        )
+
+    # ==================================================
+    # SHORTEST PATH VALIDATION
+    # ==================================================
+
+    def _shortest_path_length(
+        self,
+        obstacles,
+    ):
+        """
+        Return the shortest route length
+        using BFS.
+
+        BFS is ONLY used to validate the
+        randomly generated environment.
+
+        The RL agent does NOT use BFS
+        to select its route.
+        """
+
+        blocked = set(
+            obstacles
+        )
+
+        queue = deque(
+            [
+                (
+                    self.start_position,
+                    0,
+                )
+            ]
+        )
+
+        visited = {
+            self.start_position
+        }
+
+        while queue:
+
+            (
+                current_position,
+                distance,
+            ) = queue.popleft()
+
+            if (
+                current_position
+                == self.destination
+            ):
+
+                return distance
+
+            (
+                current_row,
+                current_col,
+            ) = current_position
+
+            for (
+                row_change,
+                col_change,
+            ) in self.actions.values():
+
+                next_position = (
+                    current_row
+                    + row_change,
+                    current_col
+                    + col_change,
+                )
+
+                if (
+                    self._is_inside_grid(
+                        next_position
+                    )
+                    and next_position
+                    not in blocked
+                    and next_position
+                    not in visited
+                ):
+
+                    visited.add(
+                        next_position
+                    )
+
+                    queue.append(
+                        (
+                            next_position,
+                            distance + 1,
+                        )
+                    )
+
+        return None
+
+    def _path_exists(
+        self,
+        obstacles,
+    ):
+        """
+        Return True if at least one path exists.
+        """
+
+        return (
+            self._shortest_path_length(
+                obstacles
+            )
+            is not None
+        )
+
+    # ==================================================
+    # STEP
+    # ==================================================
+
+    def step(
+        self,
+        action,
+    ):
+        """
+        Execute one action.
+
+        Rewards:
+
+        Normal movement       = -1
+        Boundary violation    = -10
+        Obstacle collision    = -50
+        Battery depletion     = -50
+        Successful delivery   = +100
+
+        A physical obstacle collision is treated
+        as a mission-ending failure because a
+        real drone could crash or be damaged.
         """
 
         if action not in self.actions:
+
             raise ValueError(
-                "Invalid action. Choose 0, 1, 2, or 3."
+                "Invalid action. Choose "
+                "0, 1, 2, or 3."
             )
 
-        # Every attempted movement consumes energy
+        # Every attempted action uses energy
         self.battery -= 1
 
-        row_change, col_change = (
-            self.actions[action]
-        )
+        (
+            row_change,
+            col_change,
+        ) = self.actions[action]
 
-        current_row, current_col = (
-            self.drone_position
-        )
-
-        new_row = current_row + row_change
-        new_col = current_col + col_change
+        (
+            current_row,
+            current_col,
+        ) = self.drone_position
 
         new_position = (
-            new_row,
-            new_col
+            current_row
+            + row_change,
+            current_col
+            + col_change,
         )
 
         # --------------------------------------------------
-        # Case 1: Battery depleted
+        # Battery depleted
         # --------------------------------------------------
 
         if self.battery <= 0:
@@ -245,11 +548,11 @@ class DroneEnvironment:
             return (
                 self.get_state(),
                 reward,
-                done
+                done,
             )
 
         # --------------------------------------------------
-        # Case 2: Drone tries to leave the grid
+        # Boundary
         # --------------------------------------------------
 
         if not self._is_inside_grid(
@@ -262,32 +565,42 @@ class DroneEnvironment:
             return (
                 self.get_state(),
                 reward,
-                done
+                done,
             )
 
         # --------------------------------------------------
-        # Case 3: Drone hits obstacle / restricted zone
+        # Obstacle collision
+        # --------------------------------------------------
+        #
+        # Collision is treated as a severe,
+        # mission-ending event. The drone does
+        # not move into the obstacle cell.
         # --------------------------------------------------
 
-        if new_position in self.obstacles:
+        if (
+            new_position
+            in self.obstacles
+        ):
 
-            reward = -20
-            done = False
+            reward = -50
+            done = True
 
             return (
                 self.get_state(),
                 reward,
-                done
+                done,
             )
 
         # --------------------------------------------------
         # Valid movement
         # --------------------------------------------------
 
-        self.drone_position = new_position
+        self.drone_position = (
+            new_position
+        )
 
         # --------------------------------------------------
-        # Case 4: Destination reached
+        # Goal
         # --------------------------------------------------
 
         if (
@@ -301,12 +614,8 @@ class DroneEnvironment:
             return (
                 self.get_state(),
                 reward,
-                done
+                done,
             )
-
-        # --------------------------------------------------
-        # Case 5: Normal movement
-        # --------------------------------------------------
 
         reward = -1
         done = False
@@ -314,33 +623,52 @@ class DroneEnvironment:
         return (
             self.get_state(),
             reward,
-            done
+            done,
         )
+
+    # ==================================================
+    # GRID VALIDATION
+    # ==================================================
 
     def _is_inside_grid(
         self,
-        position
+        position,
     ):
         """
-        Check whether a position lies inside the grid.
+        Check whether a position is
+        inside the grid.
         """
 
         row, col = position
 
         return (
-            0 <= row < self.grid_size
-            and 0 <= col < self.grid_size
+            0
+            <= row
+            < self.grid_size
+            and 0
+            <= col
+            < self.grid_size
         )
+
+    # ==================================================
+    # RENDER
+    # ==================================================
 
     def render(self):
         """
-        Display the current scenario, grid and battery level.
+        Print the active dynamic map.
         """
 
         print()
 
         print(
-            f"Scenario: {self.scenario_name}"
+            f"Scenario: "
+            f"{self.scenario_name}"
+        )
+
+        print(
+            f"Dynamic Obstacles: "
+            f"{self.obstacles}"
         )
 
         print()
@@ -357,28 +685,32 @@ class DroneEnvironment:
 
                 position = (
                     row,
-                    col
+                    col,
                 )
 
                 if (
                     position
                     == self.drone_position
                 ):
+
                     symbol = "D"
 
                 elif (
                     position
                     == self.destination
                 ):
+
                     symbol = "G"
 
                 elif (
                     position
                     in self.obstacles
                 ):
+
                     symbol = "X"
 
                 else:
+
                     symbol = "."
 
                 row_display.append(

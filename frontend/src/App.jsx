@@ -9,54 +9,55 @@ const SCENARIOS = {
   standard: {
     label: "Standard Delivery",
     shortDescription:
-      "Normal last-mile delivery with moderate obstacles.",
+      "Dynamic delivery environment with 3 randomly positioned obstacles.",
   },
 
   urban: {
     label: "Urban Restricted-Zone Delivery",
     shortDescription:
-      "Delivery through an urban area containing additional restricted zones.",
+      "More constrained urban delivery with 5 randomly positioned restricted zones.",
   },
 
   low_battery: {
     label: "Low-Battery Delivery",
     shortDescription:
-      "Energy-constrained delivery with limited battery capacity.",
+      "Energy-constrained delivery with dynamic obstacles and a 10-unit battery.",
   },
 };
 
 function App() {
-  const [environment, setEnvironment] = useState(null);
-  const [routeData, setRouteData] = useState(null);
+  const [environment, setEnvironment] =
+    useState(null);
 
-  const [dronePosition, setDronePosition] = useState([
-    0, 0,
-  ]);
+  const [routeData, setRouteData] =
+    useState(null);
+
+  const [dronePosition, setDronePosition] =
+    useState([0, 0]);
 
   const [algorithm, setAlgorithm] =
-    useState("q-learning");
+    useState("dqn");
 
   const [scenario, setScenario] =
     useState("standard");
 
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] =
+    useState(false);
 
   const [isAnimating, setIsAnimating] =
     useState(false);
 
-  const [error, setError] = useState("");
+  const [error, setError] =
+    useState("");
 
-  // Exploration demo
-  const [demoEvent, setDemoEvent] =
-    useState(null);
-
-  const [demoRunning, setDemoRunning] =
+  const [showRewardSystem, setShowRewardSystem] =
     useState(false);
 
-  const [
-    attemptedPosition,
-    setAttemptedPosition,
-  ] = useState(null);
+  const [collisionDemo, setCollisionDemo] =
+    useState(false);
+
+  const [collisionResult, setCollisionResult] =
+    useState(false);
 
   // ==================================================
   // LOAD ENVIRONMENT
@@ -72,7 +73,6 @@ function App() {
     try {
       setError("");
 
-      // Prevent undefined or invalid scenarios
       const safeScenario =
         selectedScenario &&
         Object.prototype.hasOwnProperty.call(
@@ -92,13 +92,19 @@ function App() {
         );
       }
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
       setEnvironment(data);
-      setDronePosition(data.start);
+
+      setDronePosition(
+        data.start
+      );
+
       setRouteData(null);
-      setDemoEvent(null);
-      setAttemptedPosition(null);
+
+      setCollisionDemo(false);
+      setCollisionResult(false);
     } catch (err) {
       console.error(err);
 
@@ -114,7 +120,10 @@ function App() {
 
   const sleep = (milliseconds) => {
     return new Promise((resolve) =>
-      setTimeout(resolve, milliseconds)
+      setTimeout(
+        resolve,
+        milliseconds
+      )
     );
   };
 
@@ -125,6 +134,49 @@ function App() {
   };
 
   // ==================================================
+  // APPLY ROUTE ENVIRONMENT
+  // ==================================================
+
+  const applyRouteEnvironment = (
+    data
+  ) => {
+    setEnvironment({
+      scenario:
+        data.scenario,
+
+      name:
+        data.scenario_name,
+
+      description:
+        data.scenario_description,
+
+      grid_size:
+        data.grid_size,
+
+      start:
+        data.start,
+
+      destination:
+        data.destination,
+
+      obstacles:
+        data.obstacles,
+
+      obstacle_count:
+        data.obstacles.length,
+
+      max_battery:
+        data.battery_capacity,
+
+      dynamic_obstacles:
+        true,
+
+      shortest_possible_steps:
+        data.shortest_possible_steps,
+    });
+  };
+
+  // ==================================================
   // RUN RL AGENT
   // ==================================================
 
@@ -132,20 +184,24 @@ function App() {
     if (
       !environment ||
       loading ||
-      isAnimating ||
-      demoRunning
+      isAnimating
     ) {
       return;
     }
 
     try {
       setLoading(true);
-      setError("");
-      setRouteData(null);
-      setDemoEvent(null);
-      setAttemptedPosition(null);
 
-      setDronePosition(environment.start);
+      setError("");
+
+      setRouteData(null);
+
+      setCollisionDemo(false);
+      setCollisionResult(false);
+
+      setDronePosition(
+        environment.start
+      );
 
       const endpoint =
         algorithm === "q-learning"
@@ -162,16 +218,34 @@ function App() {
         );
       }
 
-      const data = await response.json();
+      const data =
+        await response.json();
 
-      setRouteData(data);
+      applyRouteEnvironment(
+        data
+      );
+
+      setRouteData(
+        data
+      );
+
+      setDronePosition(
+        data.route[0]
+      );
+
       setLoading(false);
+
       setIsAnimating(true);
 
-      for (const position of data.route) {
-        setDronePosition(position);
+      for (
+        const position
+        of data.route
+      ) {
+        setDronePosition(
+          position
+        );
 
-        await sleep(450);
+        await sleep(420);
       }
 
       setIsAnimating(false);
@@ -179,6 +253,7 @@ function App() {
       console.error(err);
 
       setLoading(false);
+
       setIsAnimating(false);
 
       setError(
@@ -188,138 +263,132 @@ function App() {
   };
 
   // ==================================================
-  // EXPLORATION DEMO
+  // GENERATE NEW ENVIRONMENT
   // ==================================================
 
-  const runExplorationDemo = async () => {
-    if (
-      !environment ||
-      loading ||
-      isAnimating ||
-      demoRunning
-    ) {
-      return;
-    }
+  const generateNewEnvironment =
+    async () => {
+      if (
+        loading ||
+        isAnimating
+      ) {
+        return;
+      }
 
-    try {
-      setDemoRunning(true);
-      setError("");
-      setRouteData(null);
-      setDemoEvent(null);
-      setAttemptedPosition(null);
+      setCollisionDemo(false);
+      setCollisionResult(false);
+
+      await fetchEnvironment(
+        scenario
+      );
+    };
+
+  // ==================================================
+  // CONTROLLED COLLISION DEMONSTRATION
+  // ==================================================
+
+  const demonstrateCollision =
+    async () => {
+      if (
+        loading ||
+        isAnimating
+      ) {
+        return;
+      }
 
       /*
-       * The exploration demonstration uses the
-       * standard environment because the action
-       * sequence was designed specifically to
-       * demonstrate:
+       * This is an isolated educational
+       * visualization of the collision rule.
        *
-       * - boundary penalty
-       * - normal movement penalty
-       * - obstacle collision penalty
-       * - destination reward
+       * It does NOT train Q-Learning or DQN
+       * and does NOT modify their policies.
+       *
+       * Drone:    (1, 0)
+       * Obstacle: (1, 1)
+       *
+       * The drone attempts RIGHT.
        */
 
-      const response = await fetch(
-        `${API_URL}/demo/exploration`
+      setRouteData(null);
+
+      setCollisionDemo(true);
+      setCollisionResult(false);
+
+      setEnvironment({
+        scenario:
+          "collision_demo",
+
+        name:
+          "Obstacle Collision Demonstration",
+
+        description:
+          "Controlled visualization of the obstacle collision penalty.",
+
+        grid_size:
+          5,
+
+        start:
+          [1, 0],
+
+        destination:
+          [4, 4],
+
+        obstacles:
+          [[1, 1]],
+
+        obstacle_count:
+          1,
+
+        max_battery:
+          20,
+
+        dynamic_obstacles:
+          false,
+
+        shortest_possible_steps:
+          null,
+      });
+
+      setDronePosition(
+        [1, 0]
       );
 
-      if (!response.ok) {
-        throw new Error(
-          "Exploration demo request failed."
-        );
-      }
-
-      const data = await response.json();
-
       /*
-       * Temporarily show the Standard Delivery
-       * environment while running the controlled
-       * exploration demonstration.
+       * Pause so the audience can first
+       * see the drone beside the obstacle.
        */
 
-      if (scenario !== "standard") {
-        const environmentResponse =
-          await fetch(
-            `${API_URL}/environment?scenario=standard`
-          );
-
-        if (!environmentResponse.ok) {
-          throw new Error(
-            "Failed to load exploration environment."
-          );
-        }
-
-        const standardEnvironment =
-          await environmentResponse.json();
-
-        setEnvironment(
-          standardEnvironment
-        );
-
-        setDronePosition(
-          standardEnvironment.start
-        );
-      } else {
-        setDronePosition(
-          environment.start
-        );
-      }
-
-      for (const event of data.events) {
-        // Position before action
-        setDronePosition(event.from);
-
-        setDemoEvent({
-          ...event,
-          phase: "action",
-        });
-
-        await sleep(900);
-
-        // Show attempted location
-        setAttemptedPosition(
-          event.attempted
-        );
-
-        await sleep(700);
-
-        // Show actual resulting location
-        setDronePosition(event.to);
-
-        setDemoEvent({
-          ...event,
-          phase: "result",
-        });
-
-        await sleep(1500);
-
-        setAttemptedPosition(null);
-      }
-
-      setDemoRunning(false);
+      await sleep(1200);
 
       /*
-       * Restore the scenario selected by the user
-       * after the exploration demonstration.
+       * Collision result:
+       *
+       * The drone attempts to move RIGHT
+       * into obstacle cell (1,1).
+       *
+       * It remains at (1,0), receives -50,
+       * and the episode terminates.
        */
 
-      if (scenario !== "standard") {
-        await fetchEnvironment(
-          scenario
-        );
-      }
-    } catch (err) {
-      console.error(err);
-
-      setDemoRunning(false);
-      setAttemptedPosition(null);
-
-      setError(
-        "Unable to run the exploration demo."
+      setCollisionResult(
+        true
       );
-    }
-  };
+    };
+
+  // ==================================================
+  // RETURN FROM COLLISION DEMO
+  // ==================================================
+
+  const returnFromCollisionDemo =
+    async () => {
+      setCollisionDemo(false);
+
+      setCollisionResult(false);
+
+      await fetchEnvironment(
+        scenario
+      );
+    };
 
   // ==================================================
   // SCENARIO CHANGE
@@ -330,21 +399,10 @@ function App() {
   ) => {
     if (
       loading ||
-      isAnimating ||
-      demoRunning
+      isAnimating
     ) {
       return;
     }
-
-    /*
-     * Scenario buttons directly pass:
-     *
-     * standard
-     * urban
-     * low_battery
-     *
-     * This avoids scenario=undefined.
-     */
 
     if (
       !newScenario ||
@@ -356,11 +414,17 @@ function App() {
       return;
     }
 
-    setScenario(newScenario);
+    setCollisionDemo(false);
+    setCollisionResult(false);
+
+    setShowRewardSystem(false);
+
+    setScenario(
+      newScenario
+    );
 
     setRouteData(null);
-    setDemoEvent(null);
-    setAttemptedPosition(null);
+
     setError("");
   };
 
@@ -368,20 +432,24 @@ function App() {
   // ALGORITHM CHANGE
   // ==================================================
 
-  const handleAlgorithmChange = (event) => {
+  const handleAlgorithmChange = (
+    event
+  ) => {
     if (
       loading ||
-      isAnimating ||
-      demoRunning
+      isAnimating
     ) {
       return;
     }
 
-    setAlgorithm(event.target.value);
+    setAlgorithm(
+      event.target.value
+    );
 
     setRouteData(null);
-    setDemoEvent(null);
-    setAttemptedPosition(null);
+
+    setCollisionDemo(false);
+    setCollisionResult(false);
 
     if (environment) {
       setDronePosition(
@@ -406,41 +474,45 @@ function App() {
     );
   };
 
-  const isObstacle = (row, col) => {
-    if (!environment) {
+  const isObstacle = (
+    row,
+    col
+  ) => {
+    if (
+      !environment ||
+      !environment.obstacles
+    ) {
       return false;
     }
 
     return environment.obstacles.some(
-      ([obstacleRow, obstacleCol]) =>
+      ([
+        obstacleRow,
+        obstacleCol,
+      ]) =>
         obstacleRow === row &&
         obstacleCol === col
     );
   };
 
-  const isRouteCell = (row, col) => {
-    if (!routeData) {
+  const isRouteCell = (
+    row,
+    col
+  ) => {
+    if (
+      !routeData ||
+      collisionDemo
+    ) {
       return false;
     }
 
     return routeData.route.some(
-      ([routeRow, routeCol]) =>
+      ([
+        routeRow,
+        routeCol,
+      ]) =>
         routeRow === row &&
         routeCol === col
-    );
-  };
-
-  const isAttemptedCell = (
-    row,
-    col
-  ) => {
-    if (!attemptedPosition) {
-      return false;
-    }
-
-    return (
-      attemptedPosition[0] === row &&
-      attemptedPosition[1] === col
     );
   };
 
@@ -452,8 +524,15 @@ function App() {
       "grid-cell",
     ];
 
-    if (isObstacle(row, col)) {
-      classes.push("obstacle");
+    if (
+      isObstacle(
+        row,
+        col
+      )
+    ) {
+      classes.push(
+        "obstacle"
+      );
     }
 
     if (
@@ -462,7 +541,9 @@ function App() {
         environment.destination
       )
     ) {
-      classes.push("destination");
+      classes.push(
+        "destination"
+      );
     }
 
     if (
@@ -471,17 +552,20 @@ function App() {
         environment.start
       )
     ) {
-      classes.push("start");
-    }
-
-    if (isRouteCell(row, col)) {
-      classes.push("route");
+      classes.push(
+        "start"
+      );
     }
 
     if (
-      isAttemptedCell(row, col)
+      isRouteCell(
+        row,
+        col
+      )
     ) {
-      classes.push("attempted");
+      classes.push(
+        "route"
+      );
     }
 
     if (
@@ -490,10 +574,14 @@ function App() {
         dronePosition
       )
     ) {
-      classes.push("drone");
+      classes.push(
+        "drone"
+      );
     }
 
-    return classes.join(" ");
+    return classes.join(
+      " "
+    );
   };
 
   const getCellContent = (
@@ -509,7 +597,12 @@ function App() {
       return "🚁";
     }
 
-    if (isObstacle(row, col)) {
+    if (
+      isObstacle(
+        row,
+        col
+      )
+    ) {
       return "✕";
     }
 
@@ -535,56 +628,12 @@ function App() {
   };
 
   // ==================================================
-  // EXPLORATION HELPERS
-  // ==================================================
-
-  const getRewardClass = () => {
-    if (!demoEvent) {
-      return "";
-    }
-
-    if (demoEvent.reward > 0) {
-      return "positive-reward";
-    }
-
-    if (demoEvent.reward <= -10) {
-      return "negative-reward";
-    }
-
-    return "step-reward";
-  };
-
-  const getEventTitle = () => {
-    if (!demoEvent) {
-      return "";
-    }
-
-    switch (demoEvent.type) {
-      case "obstacle":
-        return "Obstacle Collision";
-
-      case "boundary":
-        return "Boundary Collision";
-
-      case "goal":
-        return "Destination Reached";
-
-      default:
-        return "Normal Movement";
-    }
-  };
-
-  // ==================================================
   // METRICS
   // ==================================================
 
   const getStepsValue = () => {
     if (routeData) {
       return routeData.steps;
-    }
-
-    if (demoEvent) {
-      return demoEvent.step;
     }
 
     return "--";
@@ -595,23 +644,15 @@ function App() {
       return routeData.total_reward;
     }
 
-    if (demoEvent) {
-      return demoEvent.cumulative_reward;
-    }
-
     return "--";
   };
 
   const getBatteryUsedValue = () => {
     if (routeData) {
-      return `${routeData.battery_used}/${
-        routeData.battery_capacity ??
-        environment.max_battery
-      }`;
-    }
-
-    if (demoEvent) {
-      return `${demoEvent.battery_used}/${environment.max_battery}`;
+      return (
+        `${routeData.battery_used}/` +
+        `${routeData.battery_capacity}`
+      );
     }
 
     return "--";
@@ -624,24 +665,7 @@ function App() {
         : "No";
     }
 
-    if (demoEvent) {
-      return demoEvent.destination_reached
-        ? "Yes"
-        : "No";
-    }
-
     return "--";
-  };
-
-  const getRewardMetricTitle = () => {
-    if (
-      demoEvent &&
-      !routeData
-    ) {
-      return "Cumulative Reward";
-    }
-
-    return "Reward";
   };
 
   // ==================================================
@@ -651,12 +675,16 @@ function App() {
   if (!environment) {
     return (
       <div className="loading-screen">
-        <h2>DroneRoute RL</h2>
+
+        <h2>
+          DroneRoute RL
+        </h2>
 
         <p>
           {error ||
-            "Loading environment..."}
+            "Loading dynamic environment..."}
         </p>
+
       </div>
     );
   }
@@ -668,58 +696,66 @@ function App() {
   return (
     <div className="app">
 
-      {/* =================================================
+      {/* ===============================================
           HEADER
-      ================================================= */}
+      =============================================== */}
 
       <header className="header">
+
         <div>
+
           <p className="eyebrow">
             REINFORCEMENT LEARNING PROJECT
           </p>
 
-          <h1>DroneRoute RL</h1>
+          <h1>
+            DroneRoute RL
+          </h1>
 
           <p className="subtitle">
-            Drone Delivery Optimization using
-            Reinforcement Learning
+            Dynamic Drone Delivery Optimization
+            using Reinforcement Learning
           </p>
+
         </div>
 
         <div className="status-badge">
           API Connected
         </div>
+
       </header>
 
-      {/* =================================================
-          SCENARIO SELECTOR
-      ================================================= */}
+      {/* ===============================================
+          SCENARIO SECTION
+      =============================================== */}
 
       <section className="scenario-section">
 
         <div className="scenario-heading">
 
           <div>
+
             <p className="section-label">
-              DELIVERY ENVIRONMENT
+              DYNAMIC DELIVERY ENVIRONMENT
             </p>
 
             <h2>
               Choose Delivery Scenario
             </h2>
+
           </div>
 
           <span className="scenario-badge">
-            {environment.name ||
-              SCENARIOS[scenario].label}
+            Dynamic Obstacles
           </span>
 
         </div>
 
         <p className="scenario-introduction">
-          Test the reinforcement learning
-          agents under different simulated
-          delivery conditions.
+          Obstacle positions change between
+          generated environments, requiring
+          the RL agent to adapt its route
+          instead of memorizing one fixed map.
         </p>
 
         <div className="scenario-options">
@@ -731,6 +767,7 @@ function App() {
               scenarioKey,
               scenarioData,
             ]) => (
+
               <button
                 type="button"
                 key={scenarioKey}
@@ -747,9 +784,10 @@ function App() {
                 disabled={
                   loading ||
                   isAnimating ||
-                  demoRunning
+                  collisionDemo
                 }
               >
+
                 <strong>
                   {scenarioData.label}
                 </strong>
@@ -759,7 +797,9 @@ function App() {
                     scenarioData.shortDescription
                   }
                 </span>
+
               </button>
+
             )
           )}
 
@@ -768,62 +808,112 @@ function App() {
         <div className="scenario-details">
 
           <div>
-            <span>Scenario</span>
+
+            <span>
+              Scenario
+            </span>
 
             <strong>
               {environment.name ||
-                SCENARIOS[scenario].label}
+                SCENARIOS[
+                  scenario
+                ].label}
             </strong>
+
           </div>
 
           <div>
-            <span>Battery</span>
+
+            <span>
+              Battery
+            </span>
 
             <strong>
               {environment.max_battery} units
             </strong>
+
           </div>
 
           <div>
-            <span>Restricted Cells</span>
+
+            <span>
+              Obstacles
+            </span>
 
             <strong>
-              {environment.obstacles.length}
+              {
+                environment.obstacles.length
+              }
             </strong>
+
+          </div>
+
+          <div>
+
+            <span>
+              Shortest Path
+            </span>
+
+            <strong>
+              {
+                environment.shortest_possible_steps ??
+                "--"
+              }{" "}
+              steps
+            </strong>
+
           </div>
 
         </div>
 
-        <p className="scenario-description">
-          {environment.description ||
-            SCENARIOS[scenario]
-              .shortDescription}
-        </p>
+        {!collisionDemo && (
+
+          <button
+            type="button"
+            className="demo-button"
+            onClick={
+              generateNewEnvironment
+            }
+            disabled={
+              loading ||
+              isAnimating
+            }
+          >
+            Generate New Obstacle Layout
+          </button>
+
+        )}
 
       </section>
 
-      {/* =================================================
-          SIMULATION DASHBOARD
-      ================================================= */}
+      {/* ===============================================
+          MAIN DASHBOARD
+      =============================================== */}
 
       <main className="dashboard">
 
-        {/* ===============================================
+        {/* =============================================
             ENVIRONMENT GRID
-        =============================================== */}
+        ============================================= */}
 
         <section className="panel environment-panel">
 
           <div className="panel-heading">
 
             <div>
+
               <p className="section-label">
-                ENVIRONMENT
+                {collisionDemo
+                  ? "SAFETY DEMONSTRATION"
+                  : "ENVIRONMENT"}
               </p>
 
               <h2>
-                Delivery Grid
+                {collisionDemo
+                  ? "Obstacle Collision"
+                  : "Delivery Grid"}
               </h2>
+
             </div>
 
             <span>
@@ -853,6 +943,7 @@ function App() {
                       environment.grid_size,
                   },
                   (_, col) => (
+
                     <div
                       className={
                         getCellClass(
@@ -862,11 +953,16 @@ function App() {
                       }
                       key={`${row}-${col}`}
                     >
-                      {getCellContent(
-                        row,
-                        col
-                      )}
+
+                      {
+                        getCellContent(
+                          row,
+                          col
+                        )
+                      }
+
                     </div>
+
                   )
                 )
             )}
@@ -874,17 +970,81 @@ function App() {
           </div>
 
           <div className="legend">
-            <span>🚁 Drone</span>
-            <span>S Start</span>
-            <span>G Goal</span>
-            <span>✕ Restricted Zone</span>
+
+            <span>
+              🚁 Drone
+            </span>
+
+            <span>
+              S Start
+            </span>
+
+            <span>
+              G Goal
+            </span>
+
+            <span>
+              ✕ Obstacle
+            </span>
+
           </div>
+
+          {collisionDemo ? (
+
+            <div className="description">
+
+              {!collisionResult ? (
+
+                <p>
+                  The drone is positioned at
+                  (1,0). An obstacle is directly
+                  beside it at (1,1). The drone
+                  attempts to move RIGHT.
+                </p>
+
+              ) : (
+
+                <>
+                  <p>
+                    <strong>
+                      Collision detected.
+                    </strong>
+                  </p>
+
+                  <p>
+                    The drone attempted to enter
+                    obstacle cell (1,1), received
+                    a -50 penalty and remained at
+                    (1,0).
+                  </p>
+
+                  <p>
+                    <strong>
+                      Mission terminated.
+                    </strong>
+                  </p>
+                </>
+
+              )}
+
+            </div>
+
+          ) : (
+
+            <p className="description">
+              The displayed obstacles belong to
+              the current environment. Running an
+              RL agent evaluates it on a newly
+              generated valid obstacle layout.
+            </p>
+
+          )}
 
         </section>
 
-        {/* ===============================================
-            RL CONTROLS
-        =============================================== */}
+        {/* =============================================
+            RL CONTROL PANEL
+        ============================================= */}
 
         <section className="panel control-panel">
 
@@ -897,14 +1057,11 @@ function App() {
           </h2>
 
           <p className="description">
-            Select an RL algorithm,
-            train the agent and visualize
-            the battery-aware delivery
-            route learned through interaction
-            with the environment.
+            Train the selected reinforcement
+            learning agent across changing
+            obstacle layouts and evaluate its
+            policy on a new environment.
           </p>
-
-          {/* Algorithm selector */}
 
           <div className="algorithm-control">
 
@@ -921,7 +1078,7 @@ function App() {
               disabled={
                 loading ||
                 isAnimating ||
-                demoRunning
+                collisionDemo
               }
             >
 
@@ -937,189 +1094,63 @@ function App() {
 
           </div>
 
-          {/* Run agent */}
-
           <button
             className="run-button"
-            onClick={runAgent}
+            onClick={
+              runAgent
+            }
             disabled={
               loading ||
               isAnimating ||
-              demoRunning
+              collisionDemo
             }
           >
+
             {loading
               ? `Training ${getAlgorithmLabel()}...`
               : isAnimating
               ? "Drone Moving..."
               : `Run ${getAlgorithmLabel()}`}
+
           </button>
 
           {algorithm === "dqn" && (
+
             <p className="training-note">
               DQN uses a neural network,
-              experience replay and a target
-              network. Training may take
-              longer on CPU.
+              experience replay, a target
+              network and reward shaping.
+              Training may take longer on CPU.
             </p>
+
           )}
 
-          {/* =============================================
-              EXPLORATION DEMONSTRATION
-          ============================================= */}
-
-          <div className="demo-section">
-
-            <div className="demo-divider" />
-
-            <p className="section-label">
-              LEARNING DEMONSTRATION
-            </p>
-
-            <h3>
-              Reward & Penalty Exploration
-            </h3>
-
-            <p className="demo-description">
-              Visualize how rewards and
-              penalties guide learning when
-              the drone moves normally,
-              encounters an obstacle, crosses
-              a boundary or reaches the
-              delivery destination.
-            </p>
-
-            <button
-              className="demo-button"
-              onClick={
-                runExplorationDemo
-              }
-              disabled={
-                loading ||
-                isAnimating ||
-                demoRunning
-              }
-            >
-              {demoRunning
-                ? "Running Exploration..."
-                : "Show Exploration Demo"}
-            </button>
-
-            {demoEvent && (
-              <div className="demo-event-card">
-
-                <div className="demo-event-header">
-
-                  <strong>
-                    {getEventTitle()}
-                  </strong>
-
-                  <span
-                    className={`reward-badge ${getRewardClass()}`}
-                  >
-                    Reward{" "}
-                    {demoEvent.reward > 0
-                      ? `+${demoEvent.reward}`
-                      : demoEvent.reward}
-                  </span>
-
-                </div>
-
-                <p>
-                  <strong>
-                    Step:
-                  </strong>{" "}
-                  {demoEvent.step}
-                </p>
-
-                <p>
-                  <strong>
-                    Action:
-                  </strong>{" "}
-                  {demoEvent.action}
-                </p>
-
-                <p>
-                  <strong>
-                    From:
-                  </strong>{" "}
-                  ({demoEvent.from[0]},{" "}
-                  {demoEvent.from[1]})
-                </p>
-
-                <p>
-                  <strong>
-                    Attempted:
-                  </strong>{" "}
-                  (
-                  {demoEvent.attempted[0]},
-                  {" "}
-                  {demoEvent.attempted[1]})
-                </p>
-
-                <p>
-                  <strong>
-                    Result:
-                  </strong>{" "}
-                  ({demoEvent.to[0]},{" "}
-                  {demoEvent.to[1]})
-                </p>
-
-                <p>
-                  <strong>
-                    Cumulative Reward:
-                  </strong>{" "}
-                  {
-                    demoEvent.cumulative_reward
-                  }
-                </p>
-
-                <p>
-                  <strong>
-                    Battery Remaining:
-                  </strong>{" "}
-                  {
-                    demoEvent.battery_remaining
-                  }
-                  /
-                  {
-                    environment.max_battery
-                  }
-                </p>
-
-                <p className="event-message">
-                  {demoEvent.message}
-                </p>
-
-              </div>
-            )}
-
-          </div>
-
-          {/* Error */}
-
           {error && (
+
             <p className="error-message">
               {error}
             </p>
+
           )}
 
-          {/* =============================================
-              METRICS
-          ============================================= */}
+          {/* ===========================================
+              PRIMARY RL METRICS
+          =========================================== */}
 
           <div className="metrics">
 
             <Metric
               title="Steps"
-              value={getStepsValue()}
+              value={
+                getStepsValue()
+              }
             />
 
             <Metric
-              title={
-                getRewardMetricTitle()
+              title="Reward"
+              value={
+                getRewardValue()
               }
-              value={getRewardValue()}
             />
 
             <Metric
@@ -1138,12 +1169,22 @@ function App() {
 
           </div>
 
-          {/* =============================================
+          {/* ===========================================
               ROUTE DETAILS
-          ============================================= */}
+          =========================================== */}
 
           {routeData && (
+
             <div className="route-details">
+
+              <h3>
+                Evaluation Environment
+              </h3>
+
+              <p>
+                Dynamic obstacle configuration
+                generated after training.
+              </p>
 
               <h3>
                 Algorithm
@@ -1153,514 +1194,437 @@ function App() {
                 {routeData.algorithm}
               </p>
 
-              {routeData.scenario_name && (
-                <>
-                  <h3>
-                    Delivery Scenario
-                  </h3>
-
-                  <p>
-                    {
-                      routeData.scenario_name
-                    }
-                  </p>
-                </>
-              )}
-
               <h3>
                 Learned Actions
               </h3>
 
               <p>
-                {routeData.actions.join(
-                  " → "
-                )}
+                {
+                  routeData.actions.join(
+                    " → "
+                  )
+                }
               </p>
 
-              {routeData.training_success_rate !==
-                undefined && (
-                <>
-                  <h3>
-                    Training Success Rate
-                  </h3>
+              <h3>
+                Shortest Possible Steps
+              </h3>
 
-                  <p>
-                    {
-                      routeData.training_success_rate
-                    }
-                    %
-                  </p>
-                </>
-              )}
+              <p>
+                {
+                  routeData.shortest_possible_steps
+                }
+              </p>
 
-              {routeData.battery_failure_rate !==
-                undefined && (
-                <>
-                  <h3>
-                    Battery Failure Rate
-                  </h3>
+              <h3>
+                Agent Steps
+              </h3>
 
-                  <p>
-                    {
-                      routeData.battery_failure_rate
-                    }
-                    %
-                  </p>
-                </>
-              )}
+              <p>
+                {
+                  routeData.steps
+                }
+              </p>
 
-              {routeData.average_reward_last_100 !==
-                undefined && (
-                <>
-                  <h3>
-                    Last 100 Average Reward
-                  </h3>
+              <h3>
+                Extra Steps
+              </h3>
 
-                  <p>
-                    {
-                      routeData.average_reward_last_100
-                    }
-                  </p>
-                </>
-              )}
+              <p>
+                {
+                  routeData.extra_steps ??
+                  "Not available"
+                }
+              </p>
 
-              {routeData.average_steps_last_100 !==
-                undefined && (
-                <>
-                  <h3>
-                    Last 100 Average Steps
-                  </h3>
+              <h3>
+                Route Efficiency
+              </h3>
 
-                  <p>
-                    {
-                      routeData.average_steps_last_100
-                    }
-                  </p>
-                </>
-              )}
+              <p>
+                {
+                  routeData.route_efficiency !==
+                  null &&
+                  routeData.route_efficiency !==
+                  undefined
+                    ? `${routeData.route_efficiency}%`
+                    : "Not available"
+                }
+              </p>
+
+              <h3>
+                Training Success Rate
+              </h3>
+
+              <p>
+                {
+                  routeData.training_success_rate
+                }
+                %
+              </p>
+
+              <h3>
+                Last 100 Average Reward
+              </h3>
+
+              <p>
+                {
+                  routeData.average_reward_last_100
+                }
+              </p>
+
+              <h3>
+                Last 100 Average Steps
+              </h3>
+
+              <p>
+                {
+                  routeData.average_steps_last_100
+                }
+              </p>
 
             </div>
+
           )}
+
+          {/* ===========================================
+              REWARD AND SAFETY SYSTEM
+          =========================================== */}
+
+          <div className="demo-section">
+
+            <div className="demo-divider" />
+
+            <p className="section-label">
+              LEARNING DEMONSTRATION
+            </p>
+
+            <h3>
+              Reward & Safety System
+            </h3>
+
+            <p className="demo-description">
+              Reinforcement learning improves
+              through rewards and penalties.
+              Unsafe actions receive stronger
+              penalties so the agent learns to
+              prefer safer routes.
+            </p>
+
+            <button
+              type="button"
+              className="demo-button"
+              onClick={() =>
+                setShowRewardSystem(
+                  !showRewardSystem
+                )
+              }
+              disabled={
+                loading ||
+                isAnimating ||
+                collisionDemo
+              }
+            >
+
+              {showRewardSystem
+                ? "Hide Reward System"
+                : "Show Reward System"}
+
+            </button>
+
+            {showRewardSystem && (
+
+              <div className="reward-system">
+
+                <RewardCard
+                  title="Normal Movement"
+                  reward="-1"
+                  description="A small cost represents the time and battery energy used during each navigation step."
+                />
+
+                <RewardCard
+                  title="Boundary Violation"
+                  reward="-10"
+                  description="The drone receives a larger penalty if it attempts to leave the permitted delivery area."
+                />
+
+                <RewardCard
+                  title="Obstacle Collision"
+                  reward="-50"
+                  description="A collision is treated as a serious safety failure. The episode immediately terminates."
+                  danger
+                />
+
+                <RewardCard
+                  title="Successful Delivery"
+                  reward="+100"
+                  description="Reaching the destination successfully provides the largest positive reward."
+                  positive
+                />
+
+                {/* =====================================
+                    COLLISION EXPLORATION
+                ===================================== */}
+
+                <div className="demo-event-card">
+
+                  <div className="demo-event-header">
+
+                    <strong>
+                      Interactive Collision Exploration
+                    </strong>
+
+                    <span className="reward-badge negative-reward">
+                      -50
+                    </span>
+
+                  </div>
+
+                  <p className="event-message">
+                    Demonstrate what happens when
+                    the drone attempts to enter a
+                    cell occupied by an obstacle.
+                  </p>
+
+                  {!collisionDemo && (
+
+                    <button
+                      type="button"
+                      className="demo-button"
+                      onClick={
+                        demonstrateCollision
+                      }
+                      disabled={
+                        loading ||
+                        isAnimating
+                      }
+                    >
+                      Demonstrate Obstacle Collision
+                    </button>
+
+                  )}
+
+                  {collisionDemo &&
+                    !collisionResult && (
+
+                    <div className="event-message">
+
+                      <p>
+                        <strong>
+                          Drone Position:
+                        </strong>{" "}
+                        (1,0)
+                      </p>
+
+                      <p>
+                        <strong>
+                          Obstacle Position:
+                        </strong>{" "}
+                        (1,1)
+                      </p>
+
+                      <p>
+                        <strong>
+                          Action:
+                        </strong>{" "}
+                        RIGHT
+                      </p>
+
+                      <p>
+                        Attempting movement...
+                      </p>
+
+                    </div>
+
+                  )}
+
+                  {collisionDemo &&
+                    collisionResult && (
+
+                    <div className="event-message">
+
+                      <p>
+                        <strong>
+                          Action:
+                        </strong>{" "}
+                        RIGHT
+                      </p>
+
+                      <p>
+                        <strong>
+                          From:
+                        </strong>{" "}
+                        (1,0)
+                      </p>
+
+                      <p>
+                        <strong>
+                          Attempted Position:
+                        </strong>{" "}
+                        (1,1)
+                      </p>
+
+                      <p>
+                        <strong>
+                          Obstacle:
+                        </strong>{" "}
+                        Detected
+                      </p>
+
+                      <p>
+                        <strong>
+                          Drone Position:
+                        </strong>{" "}
+                        (1,0)
+                      </p>
+
+                      <p>
+                        <strong>
+                          Reward:
+                        </strong>{" "}
+                        -50
+                      </p>
+
+                      <p>
+                        <strong>
+                          Mission Status:
+                        </strong>{" "}
+                        Terminated
+                      </p>
+
+                      <p>
+                        The drone does not continue
+                        toward the destination after
+                        the collision.
+                      </p>
+
+                      <button
+                        type="button"
+                        className="demo-button"
+                        onClick={
+                          returnFromCollisionDemo
+                        }
+                      >
+                        Return to Environment
+                      </button>
+
+                    </div>
+
+                  )}
+
+                </div>
+
+                <div className="safety-rule">
+
+                  <strong>
+                    Safety Rule
+                  </strong>
+
+                  <p>
+                    Obstacle collision immediately
+                    terminates the episode because
+                    a physical collision could
+                    damage or crash a real drone.
+                  </p>
+
+                </div>
+
+                <p className="demo-description">
+                  This section demonstrates the
+                  reward structure and collision
+                  safety rule. Actual learned
+                  navigation is demonstrated
+                  separately by running Q-Learning
+                  or DQN.
+                </p>
+
+              </div>
+
+            )}
+
+          </div>
 
         </section>
 
       </main>
 
-      {/* =================================================
-          REAL-WORLD APPLICATION
-      ================================================= */}
+      {/* ===============================================
+          PROJECT SUMMARY
+      =============================================== */}
 
       <section className="real-world-section">
 
         <div className="section-intro">
 
           <p className="section-label">
-            REAL-WORLD APPLICATION
+            PROJECT SIGNIFICANCE
           </p>
 
           <h2>
-            Why DroneRoute RL Matters
+            Why Dynamic DroneRoute RL Matters
           </h2>
 
           <p>
-            DroneRoute RL demonstrates how
-            reinforcement learning can support
-            autonomous delivery decisions when
-            a drone must consider route
-            efficiency, restricted areas and
-            limited battery capacity.
+            Instead of learning one predefined
+            obstacle map, the system trains
+            across changing valid environments.
+            The agent receives local obstacle
+            information together with position
+            and battery state, allowing it to
+            adapt navigation decisions to the
+            current delivery conditions.
           </p>
 
         </div>
 
-        {/* ===============================================
-            PROBLEM AND SOLUTION
-        =============================================== */}
+        <div className="benefits-grid">
 
-        <div className="problem-solution-grid">
+          <BenefitCard
+            icon="↗"
+            title="Dynamic Routing"
+            description="Obstacle positions change between environments, so the agent must adapt instead of memorizing one fixed route."
+          />
 
-          <article className="info-card">
+          <BenefitCard
+            icon="◎"
+            title="Obstacle Awareness"
+            description="The RL state includes blocked directions, allowing decisions to respond to surrounding obstacles and boundaries."
+          />
 
-            <span className="info-number">
-              01
-            </span>
+          <BenefitCard
+            icon="⚡"
+            title="Battery Awareness"
+            description="Every attempted movement consumes energy, encouraging efficient navigation under battery constraints."
+          />
 
-            <h3>
-              Current Problem
-            </h3>
-
-            <p>
-              Drone delivery routes can be
-              affected by buildings,
-              restricted zones, unnecessary
-              movement and limited battery
-              capacity. Inefficient decisions
-              can increase energy usage or
-              prevent successful delivery.
-            </p>
-
-          </article>
-
-          <article className="info-card">
-
-            <span className="info-number">
-              02
-            </span>
-
-            <h3>
-              Proposed Solution
-            </h3>
-
-            <p>
-              DroneRoute RL uses reinforcement
-              learning to allow an agent to
-              learn navigation decisions from
-              rewards and penalties instead of
-              manually specifying every
-              movement.
-            </p>
-
-          </article>
+          <BenefitCard
+            icon="◈"
+            title="Q-Learning vs DQN"
+            description="The project compares tabular reinforcement learning with neural-network-based Deep Q-Learning in dynamic environments."
+          />
 
         </div>
-
-        {/* ===============================================
-            SIMULATION TO REAL WORLD
-        =============================================== */}
-
-        <div className="mapping-section">
-
-          <div className="mapping-heading">
-
-            <p className="section-label">
-              SIMULATION TO REAL WORLD
-            </p>
-
-            <h2>
-              What Does the Grid Represent?
-            </h2>
-
-          </div>
-
-          <div className="mapping-grid">
-
-            <MappingCard
-              simulation="Grid"
-              realWorld="Delivery Area / Map"
-            />
-
-            <MappingCard
-              simulation="Start"
-              realWorld="Warehouse / Dispatch Point"
-            />
-
-            <MappingCard
-              simulation="Goal"
-              realWorld="Customer Location"
-            />
-
-            <MappingCard
-              simulation="Obstacles"
-              realWorld="Buildings / No-Fly Zones"
-            />
-
-            <MappingCard
-              simulation="Battery Units"
-              realWorld="Available Drone Energy"
-            />
-
-            <MappingCard
-              simulation="RL Actions"
-              realWorld="Navigation Decisions"
-            />
-
-          </div>
-
-        </div>
-
-        {/* ===============================================
-            OPERATIONAL FLOW
-        =============================================== */}
-
-        <div className="workflow-section">
-
-          <p className="section-label">
-            OPERATIONAL CONCEPT
-          </p>
-
-          <h2>
-            How It Could Support a
-            Delivery System
-          </h2>
-
-          <div className="workflow">
-
-            <WorkflowStep
-              number="1"
-              title="Delivery Request"
-              description="A customer delivery destination is received."
-            />
-
-            <div className="workflow-arrow">
-              →
-            </div>
-
-            <WorkflowStep
-              number="2"
-              title="Environment Data"
-              description="Route constraints, restricted areas and battery information are provided."
-            />
-
-            <div className="workflow-arrow">
-              →
-            </div>
-
-            <WorkflowStep
-              number="3"
-              title="RL Decision"
-              description="The trained agent evaluates the current state and selects navigation actions."
-            />
-
-            <div className="workflow-arrow">
-              →
-            </div>
-
-            <WorkflowStep
-              number="4"
-              title="Delivery Route"
-              description="The drone follows an efficient route toward the destination."
-            />
-
-          </div>
-
-        </div>
-
-        {/* ===============================================
-            BENEFITS
-        =============================================== */}
-
-        <div className="benefits-section">
-
-          <p className="section-label">
-            PROJECT BENEFITS
-          </p>
-
-          <h2>
-            What Is Being Optimized?
-          </h2>
-
-          <div className="benefits-grid">
-
-            <BenefitCard
-              icon="↗"
-              title="Route Efficiency"
-              description="Penalizing unnecessary movement encourages the agent to learn shorter and more efficient delivery behaviour."
-            />
-
-            <BenefitCard
-              icon="⚡"
-              title="Energy Awareness"
-              description="Every attempted action consumes battery, connecting route efficiency with available delivery energy."
-            />
-
-            <BenefitCard
-              icon="⊘"
-              title="Restricted-Zone Avoidance"
-              description="Large penalties discourage navigation through obstacles and simulated no-fly areas."
-            />
-
-            <BenefitCard
-              icon="◎"
-              title="Autonomous Decisions"
-              description="The agent learns a navigation policy through interaction instead of following only manually programmed movements."
-            />
-
-          </div>
-
-        </div>
-
-        {/* ===============================================
-            RL CONTRIBUTION
-        =============================================== */}
-
-        <div className="rl-explanation">
-
-          <div>
-
-            <p className="section-label">
-              WHY REINFORCEMENT LEARNING?
-            </p>
-
-            <h2>
-              Learning Through Consequences
-            </h2>
-
-            <p>
-              The agent interacts with the
-              delivery environment and receives
-              feedback for its actions.
-              Repeated interaction helps it
-              learn which decisions produce
-              better long-term outcomes.
-            </p>
-
-          </div>
-
-          <div className="reward-system">
-
-            <RewardRow
-              label="Successful Delivery"
-              value="+100"
-              type="good"
-            />
-
-            <RewardRow
-              label="Normal Movement"
-              value="-1"
-            />
-
-            <RewardRow
-              label="Boundary Violation"
-              value="-10"
-              type="bad"
-            />
-
-            <RewardRow
-              label="Obstacle Collision"
-              value="-20"
-              type="bad"
-            />
-
-            <RewardRow
-              label="Battery Depleted"
-              value="-50"
-              type="bad"
-            />
-
-          </div>
-
-        </div>
-
-        {/* ===============================================
-            LIMITATIONS AND FUTURE SCOPE
-        =============================================== */}
-
-        <div className="limitations-grid">
-
-          <article className="limitations-card">
-
-            <p className="section-label">
-              CURRENT LIMITATIONS
-            </p>
-
-            <h2>
-              Prototype Scope
-            </h2>
-
-            <ul>
-
-              <li>
-                Uses a simplified 5 × 5
-                simulated environment.
-              </li>
-
-              <li>
-                Obstacles are predefined
-                rather than detected from
-                real sensors.
-              </li>
-
-              <li>
-                Battery consumption is
-                represented using simplified
-                energy units.
-              </li>
-
-              <li>
-                Weather, wind and payload
-                weight are not currently
-                modelled.
-              </li>
-
-              <li>
-                The system does not currently
-                control a physical drone.
-              </li>
-
-            </ul>
-
-          </article>
-
-          <article className="future-card">
-
-            <p className="section-label">
-              FUTURE SCOPE
-            </p>
-
-            <h2>
-              From Simulation to Deployment
-            </h2>
-
-            <ul>
-
-              <li>
-                Integrate real GPS and
-                geographical map data.
-              </li>
-
-              <li>
-                Add dynamic obstacles and
-                changing restricted zones.
-              </li>
-
-              <li>
-                Incorporate weather and wind
-                conditions.
-              </li>
-
-              <li>
-                Use real drone battery
-                telemetry and payload data.
-              </li>
-
-              <li>
-                Connect the learned policy to
-                a drone simulator or physical
-                flight controller.
-              </li>
-
-            </ul>
-
-          </article>
-
-        </div>
-
-        {/* ===============================================
-            PROJECT SIGNIFICANCE
-        =============================================== */}
 
         <div className="project-conclusion">
 
           <p className="section-label">
-            PROJECT SIGNIFICANCE
+            CURRENT SCOPE
           </p>
 
           <h2>
-            A Foundation for Intelligent
-            Drone Delivery
+            Simulation-Based Prototype
           </h2>
 
           <p>
-            DroneRoute RL is a
-            simulation-based prototype that
-            demonstrates how reinforcement
-            learning can be applied to
-            autonomous, battery-aware delivery
-            navigation. The current system
-            provides a foundation for future
-            integration with real maps,
-            sensors, dynamic conditions and
-            physical drones.
+            DroneRoute RL currently uses a
+            simplified 5 × 5 simulation with
+            randomly generated obstacle
+            configurations between episodes.
+            Obstacles remain fixed during one
+            episode. Future work can extend the
+            system to moving obstacles, real
+            maps, GPS, weather, payload effects
+            and physical drone systems.
           </p>
 
         </div>
@@ -1681,6 +1645,7 @@ function Metric({
 }) {
   return (
     <div className="metric-card">
+
       <span>
         {title}
       </span>
@@ -1688,50 +1653,50 @@ function Metric({
       <strong>
         {value}
       </strong>
-    </div>
-  );
-}
-
-function MappingCard({
-  simulation,
-  realWorld,
-}) {
-  return (
-    <div className="mapping-card">
-
-      <span>
-        {simulation}
-      </span>
-
-      <strong>
-        →
-      </strong>
-
-      <p>
-        {realWorld}
-      </p>
 
     </div>
   );
 }
 
-function WorkflowStep({
-  number,
+function RewardCard({
   title,
+  reward,
   description,
+  danger = false,
+  positive = false,
 }) {
   return (
-    <div className="workflow-step">
+    <div
+      className={`demo-event-card ${
+        danger
+          ? "reward-danger"
+          : positive
+          ? "reward-positive"
+          : ""
+      }`}
+    >
 
-      <span className="workflow-number">
-        {number}
-      </span>
+      <div className="demo-event-header">
 
-      <h3>
-        {title}
-      </h3>
+        <strong>
+          {title}
+        </strong>
 
-      <p>
+        <span
+          className={`reward-badge ${
+            positive
+              ? "positive-reward"
+              : reward === "-1"
+              ? "step-reward"
+              : "negative-reward"
+          }`}
+        >
+          Reward {reward}
+        </span>
+
+      </div>
+
+      <p className="event-message">
         {description}
       </p>
 
@@ -1760,34 +1725,6 @@ function BenefitCard({
       </p>
 
     </article>
-  );
-}
-
-function RewardRow({
-  label,
-  value,
-  type = "",
-}) {
-  return (
-    <div className="reward-row">
-
-      <span>
-        {label}
-      </span>
-
-      <strong
-        className={
-          type === "good"
-            ? "reward-good"
-            : type === "bad"
-            ? "reward-bad"
-            : ""
-        }
-      >
-        {value}
-      </strong>
-
-    </div>
   );
 }
 
