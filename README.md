@@ -1,10 +1,17 @@
 # DroneRoute RL
 
-### Drone Delivery Optimization using Reinforcement Learning
+### Dynamic Drone Delivery Optimization using Reinforcement Learning
 
-DroneRoute RL is a reinforcement learning project that demonstrates how intelligent agents can learn efficient drone delivery routes while considering obstacles, restricted zones, route efficiency, and limited battery capacity.
+DroneRoute RL is a reinforcement learning project that demonstrates how autonomous drones can learn safe and efficient delivery routes while considering **dynamic obstacle configurations, battery limitations, route efficiency, and safety constraints**.
 
-The system compares **Q-Learning** and **Deep Q-Network (DQN)** approaches across multiple delivery scenarios and provides an interactive web dashboard for visualizing the learned routes and reinforcement learning behaviour.
+The project implements and compares two reinforcement learning approaches:
+
+- **Q-Learning**
+- **Deep Q-Network (DQN)**
+
+An interactive React dashboard allows users to select delivery scenarios, generate dynamic environments, run RL agents, visualize drone movement, compare route performance, and explore the reward and safety system.
+
+---
 
 ## Live Project
 
@@ -17,108 +24,204 @@ https://droneroute-rl-api.onrender.com
 **GitHub Repository:**  
 https://github.com/karamchandsuresh/DroneRoute-RL
 
-> The backend is hosted on Render's free service, so the first request after a period of inactivity may take some time to start.
+> The backend uses Render's free hosting service, so the first request after inactivity may take some time while the service starts.
 
 ---
 
 ## Problem Statement
 
-Drone delivery systems must determine efficient routes while dealing with practical constraints such as obstacles, restricted areas, unnecessary movement, and limited battery capacity.
+Drone delivery systems need to determine safe and efficient routes while dealing with obstacles, restricted areas, unnecessary movement, and limited battery capacity.
 
-Traditional fixed-route approaches may not adapt well when environmental conditions or delivery constraints change.
+Fixed routes may become unsuitable when environmental conditions change. An autonomous delivery system therefore needs a decision-making mechanism that can adapt its navigation according to the current environment.
 
-DroneRoute RL explores how **reinforcement learning** can allow a drone agent to learn navigation policies through interaction with a simulated environment and improve its delivery decisions based on rewards and penalties.
+DroneRoute RL explores how **Reinforcement Learning (RL)** can enable a drone to learn navigation policies through interaction with a simulated delivery environment.
 
 ---
 
 ## Proposed Solution
 
-DroneRoute RL models drone delivery as a reinforcement learning problem.
+DroneRoute RL models drone navigation as a reinforcement learning problem.
 
-The drone interacts with a grid-based environment where it must:
+The drone agent must:
 
 - Start from a defined delivery origin.
-- Navigate toward the customer destination.
+- Reach the destination safely.
+- Respond to dynamically generated obstacle layouts.
 - Avoid obstacles and restricted zones.
+- Remain inside the permitted grid.
 - Minimize unnecessary movements.
-- Operate within the available battery capacity.
-- Learn from rewards and penalties.
-- Reach the destination using an efficient route.
+- Operate within its battery capacity.
+- Learn through rewards and penalties.
 
-Two reinforcement learning algorithms are implemented and compared:
-
-1. **Q-Learning**
-2. **Deep Q-Network (DQN)**
+The project compares traditional **tabular Q-Learning** with **Deep Q-Networks (DQN)**.
 
 ---
 
-## Why This Project Is Useful
+## Key Features
 
-Drone delivery is fundamentally a decision-making problem.
-
-A delivery drone must continuously decide which action should be taken based on its current position, environmental restrictions, and available energy.
-
-DroneRoute RL demonstrates how reinforcement learning can support this decision-making process by learning policies that balance:
-
-- Route efficiency
-- Delivery success
-- Obstacle avoidance
-- Restricted-zone avoidance
-- Battery consumption
-
-The current project is a simulation rather than a real drone control system, but it provides a foundation for studying how RL-based navigation could be extended to more realistic autonomous delivery environments.
+- Dynamic obstacle generation
+- Battery-aware navigation
+- Local obstacle and boundary awareness
+- Q-Learning implementation
+- Deep Q-Network implementation
+- Experience replay and target network
+- Epsilon-greedy exploration
+- Reward shaping for DQN
+- Safety-oriented collision handling
+- Three delivery scenarios
+- Route efficiency measurement
+- Shortest-path comparison
+- Animated route visualization
+- Training and evaluation metrics
+- Reward & Safety demonstration
+- FastAPI backend
+- React frontend
+- Cloud deployment
 
 ---
 
-## System Architecture
+# System Architecture
 
 ```text
-                     DroneRoute RL
-                           |
-              +------------+------------+
-              |                         |
-        React Frontend             FastAPI Backend
-              |                         |
-              |                 Scenario Selection
-              |                         |
-              |                  Drone Environment
-              |                         |
-              |              +----------+----------+
-              |              |                     |
-              |         Q-Learning                DQN
-              |              |                     |
-              |         Q-Table Learning      Neural Network
-              |                                    |
-              |                           Experience Replay
-              |                           Target Network
-              |                           Reward Shaping
-              |                                    |
-              +--------------- API ----------------+
+                   User
+                    |
+                    v
+             React Frontend
+                    |
+                    v
+              FastAPI API
+                    |
+                    v
+          Scenario Selection
+                    |
+                    v
+          Drone Environment
+          /              \
+ Dynamic Obstacles     Battery
+          \              /
+           v            v
+          RL State Representation
+                    |
+          +---------+---------+
+          |                   |
+          v                   v
+     Q-Learning              DQN
+       Q-Table          Neural Network
                               |
-                       Route Visualization
-                              |
-                    Metrics & RL Demonstration
+                       Experience Replay
+                       Target Network
+                       Reward Shaping
+          |                   |
+          +---------+---------+
+                    |
+                    v
+             Route Evaluation
+                    |
+                    v
+       Visualization + Metrics
 ```
+
+The React frontend communicates with the FastAPI backend through HTTP requests.
+
+The backend creates the selected environment, trains the requested RL algorithm, evaluates the learned policy, and returns the route and performance information to the frontend.
 
 ---
 
-## Reinforcement Learning Environment
+# Reinforcement Learning Environment
 
-The drone operates in a **5 × 5 grid environment**.
+## Grid Environment
 
-### State
-
-The state is represented as:
+The drone operates inside a:
 
 ```text
-(row, column, battery)
+5 × 5 grid
 ```
 
-This allows the agent to consider both its location and remaining energy when making decisions.
+The delivery begins at:
 
-### Actions
+```text
+Start = (0, 0)
+```
 
-The agent can perform four actions:
+and attempts to reach:
+
+```text
+Destination = (4, 4)
+```
+
+Obstacle positions are dynamically generated according to the selected scenario.
+
+Generated environments are validated to ensure that a possible route exists between the start and destination.
+
+---
+
+## Dynamic Obstacles
+
+The final version does not train the agents using only one fixed obstacle map.
+
+Instead, obstacle configurations can change between episodes and generated environments.
+
+For example:
+
+```text
+Episode 1 → Layout A
+Episode 2 → Layout B
+Episode 3 → Layout C
+...
+```
+
+This encourages the agents to learn navigation behaviour that can respond to different obstacle arrangements.
+
+> Obstacles are dynamic **between environments/episodes**, but they do not move while the drone is navigating within a single episode.
+
+---
+
+# State Representation
+
+The final RL state contains **7 values**:
+
+```text
+(
+    row,
+    column,
+    battery,
+    blocked_up,
+    blocked_down,
+    blocked_left,
+    blocked_right
+)
+```
+
+The first two values represent the drone's position.
+
+The third value represents remaining battery.
+
+The final four values indicate whether movement in each direction is blocked by an obstacle or grid boundary.
+
+Example:
+
+```text
+(0, 0, 20, 1, 0, 1, 0)
+```
+
+This means the drone:
+
+```text
+Position:       (0,0)
+Battery:        20
+UP blocked:     Yes
+DOWN blocked:   No
+LEFT blocked:   Yes
+RIGHT blocked:  No
+```
+
+Adding local obstacle information helps both agents respond to changing obstacle configurations.
+
+---
+
+# Actions
+
+The drone has four possible actions:
 
 ```text
 0 = UP
@@ -127,232 +230,493 @@ The agent can perform four actions:
 3 = RIGHT
 ```
 
-### Reward System
+At each step, the RL agent selects one action based on exploration or its learned policy.
 
-| Event | Reward / Penalty |
+---
+
+# Reward and Safety System
+
+| Event | Reward |
 |---|---:|
-| Destination reached | +100 |
-| Normal movement | -1 |
-| Boundary violation | -10 |
-| Obstacle collision | -20 |
-| Battery depletion | -50 |
+| Successful Delivery | +100 |
+| Normal Movement | -1 |
+| Boundary Violation | -10 |
+| Obstacle Collision | -50 |
+| Battery Depletion | -50 |
 
-The reward system encourages successful and efficient delivery while discouraging unsafe or unnecessary actions.
-
----
-
-## Delivery Scenarios
-
-DroneRoute RL provides three environments for evaluating the agents.
-
-### 1. Standard Delivery
-
-A normal last-mile delivery scenario with a moderate number of obstacles.
-
-- Grid: 5 × 5
-- Battery Capacity: 20
-- Moderate obstacles
-
-### 2. Urban Restricted-Zone Delivery
-
-Represents a more constrained urban environment containing additional buildings or restricted areas.
-
-- Grid: 5 × 5
-- Battery Capacity: 20
-- Increased number of obstacles/restricted zones
-
-### 3. Low-Battery Delivery
-
-Tests whether the agent can complete the delivery under a strict energy constraint.
-
-- Grid: 5 × 5
-- Battery Capacity: 10
-- Energy-efficient navigation required
-
----
-
-## Q-Learning
-
-Q-Learning is used as the tabular reinforcement learning baseline.
-
-The algorithm learns a **Q-value** for each state-action combination.
-
-The agent uses an **epsilon-greedy strategy**:
-
-- Exploration allows the drone to try different actions.
-- Exploitation allows it to select actions with the highest learned Q-values.
-
-Q-Learning works effectively for the project's relatively small discrete environment.
-
----
-
-## Deep Q-Network (DQN)
-
-DQN extends the reinforcement learning implementation by replacing the Q-table with a neural network.
-
-The network receives the normalized state:
+### Normal Movement
 
 ```text
-[row, column, battery]
+-1
 ```
 
-and predicts Q-values for:
+represents the energy and time required for each movement and encourages shorter routes.
+
+### Boundary Violation
 
 ```text
-[UP, DOWN, LEFT, RIGHT]
+-10
 ```
+
+discourages the drone from attempting to leave the permitted operating area.
+
+### Obstacle Collision
+
+```text
+-50
+```
+
+is treated as a serious safety failure.
+
+An obstacle collision **terminates the mission**, representing the possibility of drone damage or failure in a real-world collision.
+
+### Successful Delivery
+
+```text
++100
+```
+
+is the maximum positive reward and represents successful completion of the delivery mission.
+
+---
+
+# Delivery Scenarios
+
+DroneRoute RL provides three scenarios.
+
+## 1. Standard Delivery
+
+Normal last-mile delivery environment.
+
+```text
+Grid Size:          5 × 5
+Battery Capacity:   20
+Dynamic Obstacles:  3
+```
+
+---
+
+## 2. Urban Restricted-Zone Delivery
+
+A more difficult environment with additional obstacles representing restricted areas.
+
+```text
+Grid Size:          5 × 5
+Battery Capacity:   20
+Dynamic Obstacles:  5
+```
+
+The larger number of obstacles makes navigation and generalization more challenging.
+
+---
+
+## 3. Low-Battery Delivery
+
+Tests whether the agent can complete the delivery under a stricter energy constraint.
+
+```text
+Grid Size:          5 × 5
+Battery Capacity:   10
+Dynamic Obstacles:  3
+```
+
+Because battery capacity is limited, inefficient navigation can cause mission failure.
+
+---
+
+# Q-Learning
+
+Q-Learning is used as the project's **tabular reinforcement learning baseline**.
+
+It stores learned values in a Q-table:
+
+```text
+Q(state, action)
+```
+
+The Q-value represents the expected future reward for taking an action in a particular state.
+
+The Q-Learning update rule is:
+
+```text
+Q(s,a) ← Q(s,a) +
+α [r + γ max Q(s',a') - Q(s,a)]
+```
+
+where:
+
+```text
+α = Learning rate
+γ = Discount factor
+r = Reward
+s = Current state
+s' = Next state
+```
+
+The Q-table considers:
+
+```text
+Row
+Column
+Battery
+Blocked UP
+Blocked DOWN
+Blocked LEFT
+Blocked RIGHT
+Action
+```
+
+This allows the Q-Learning agent to consider both battery level and immediate obstacle information.
+
+---
+
+## Exploration vs Exploitation
+
+Q-Learning uses an **epsilon-greedy strategy**.
+
+During exploration, the agent sometimes chooses random actions to discover different possibilities.
+
+During exploitation, it chooses the action with the highest learned Q-value.
+
+As training progresses, epsilon decreases so that the agent increasingly relies on its learned policy.
+
+---
+
+# Deep Q-Network (DQN)
+
+DQN replaces the explicit Q-table with a neural network.
+
+```text
+7-Value State
+      |
+      v
+Neural Network
+      |
+      v
+Q(UP)
+Q(DOWN)
+Q(LEFT)
+Q(RIGHT)
+```
+
+The neural network estimates the expected Q-value for each possible action.
 
 The DQN implementation includes:
 
 - Neural-network Q-value approximation
+- State normalization
 - Experience replay
 - Target network
 - Epsilon-greedy exploration
-- State normalization
 - Adam optimizer
 - Mean Squared Error loss
 - Reward shaping
 
-DQN demonstrates how the project can move beyond tabular RL toward approaches capable of handling larger state representations.
-
 ---
 
-## Reward Shaping Experiment
+## Experience Replay
 
-The Low-Battery scenario created an important reinforcement learning challenge.
-
-Initially, DQN frequently exhausted its battery before discovering a successful route. Under the strict battery constraint, successful experiences were rare and the destination reward provided limited learning feedback.
-
-Training-only **reward shaping** was therefore introduced.
-
-The agent receives additional learning feedback when it moves closer to or farther from the destination.
-
-The original environment reward system remains unchanged during final evaluation.
-
-This helped DQN learn a successful route while maintaining the original delivery objective.
-
----
-
-## Final Low-Battery DQN Result
-
-The final DQN evaluation successfully completed the Low-Battery scenario.
-
-| Metric | Result |
-|---|---:|
-| Battery Capacity | 10 |
-| Route Length | 8 steps |
-| Total Reward | 93 |
-| Battery Used | 8 |
-| Battery Remaining | 2 |
-| Destination Reached | Yes |
-| Last 100 Avg. Reward | 88.89 |
-| Last 100 Avg. Steps | 8.11 |
-
-### Learned Route
+DQN stores experiences such as:
 
 ```text
+(
+    state,
+    action,
+    reward,
+    next_state,
+    done
+)
+```
+
+inside replay memory.
+
+Random batches are sampled during training, helping reduce correlation between consecutive experiences and improving training stability.
+
+---
+
+## Target Network
+
+DQN maintains two networks:
+
+```text
+Policy Network
+Target Network
+```
+
+The policy network learns continuously.
+
+The target network is periodically updated from the policy network and provides more stable target Q-values during training.
+
+---
+
+# Reward Shaping
+
+DQN uses additional **training-only reward shaping**.
+
+The agent receives extra learning feedback depending on whether its movement takes it closer to or farther from the destination.
+
+Conceptually:
+
+```text
+Closer to Destination
+        ↓
+Positive Learning Feedback
+
+Farther from Destination
+        ↓
+Negative Learning Feedback
+```
+
+The actual environment rewards remain responsible for final evaluation results.
+
+Reward shaping helps the DQN learn useful navigation behaviour more efficiently without directly giving it the correct route.
+
+---
+
+# Q-Learning vs DQN
+
+| Feature | Q-Learning | DQN |
+|---|---|---|
+| Representation | Q-Table | Neural Network |
+| Neural Network | No | Yes |
+| Experience Replay | No | Yes |
+| Target Network | No | Yes |
+| Epsilon-Greedy | Yes | Yes |
+| Battery Awareness | Yes | Yes |
+| Obstacle Awareness | Yes | Yes |
+| Dynamic Training | Yes | Yes |
+| Reward Shaping | No | Yes |
+| Implemented | Yes | Yes |
+
+Q-Learning provides a simpler and interpretable baseline.
+
+DQN demonstrates how deep reinforcement learning can approximate Q-values and handle more complex state representations.
+
+---
+
+# Training and Evaluation
+
+During training, the agents interact with dynamically generated obstacle configurations.
+
+During evaluation:
+
+```text
+Exploration = Disabled
+```
+
+and the learned policy selects actions through exploitation.
+
+The evaluation environment can contain an obstacle layout different from those encountered during individual training episodes.
+
+This helps demonstrate whether the learned policy can respond to changing environments.
+
+---
+
+## DQN Evaluation Reliability
+
+Dynamic environments can occasionally generate layouts on which a learned policy fails even after successful training.
+
+For difficult scenarios such as Urban delivery, DQN evaluation can test a small number of independently generated valid environments and use the first environment successfully solved by the learned policy.
+
+The DQN still independently chooses every action using its neural-network Q-values.
+
+No predefined route is provided to the agent.
+
+If the permitted attempts fail, the failed evaluation is retained.
+
+---
+
+# Shortest-Path Comparison
+
+A shortest-path algorithm is used only for:
+
+- validating generated obstacle configurations,
+- determining the shortest possible route length,
+- calculating route efficiency.
+
+It is **not used by Q-Learning or DQN to choose navigation actions**.
+
+The RL agents must still determine their own routes using their learned policies.
+
+---
+
+# Route Efficiency
+
+Route efficiency is calculated as:
+
+```text
+                   Shortest Possible Steps
+Route Efficiency = ----------------------- × 100
+                       Actual Steps
+```
+
+For example:
+
+```text
+Shortest Possible Steps = 8
+Agent Steps = 8
+
+Route Efficiency = 100%
+```
+
+A successful 8-step route is therefore optimal when the shortest valid route also requires eight movements.
+
+---
+
+# Example DQN Evaluation
+
+One successful Standard scenario evaluation produced:
+
+```text
+Route:
 (0,0)
-   ↓
-(0,1)
-   ↓
-(0,2)
-   ↓
-(0,3)
-   ↓
-(0,4)
-   ↓
-(1,4)
-   ↓
-(2,4)
-   ↓
-(3,4)
-   ↓
-(4,4)
+→ (0,1)
+→ (0,2)
+→ (0,3)
+→ (1,3)
+→ (2,3)
+→ (3,3)
+→ (3,4)
+→ (4,4)
 ```
 
 Actions:
 
 ```text
-RIGHT → RIGHT → RIGHT → RIGHT
-→ DOWN → DOWN → DOWN → DOWN
+RIGHT
+→ RIGHT
+→ RIGHT
+→ DOWN
+→ DOWN
+→ DOWN
+→ RIGHT
+→ DOWN
 ```
 
-The Manhattan distance between `(0,0)` and `(4,4)` is eight moves, so the final policy achieved a shortest 8-step route.
+Result:
+
+```text
+Steps:                    8
+Shortest Possible Steps:  8
+Extra Steps:              0
+Total Reward:             93
+Battery Remaining:        12
+Battery Used:             8
+Destination Reached:      True
+```
+
+Because obstacle layouts are dynamically generated, exact routes and results may vary between runs.
 
 ---
 
-## Q-Learning vs DQN
+# Interactive Dashboard
 
-| Feature | Q-Learning | DQN |
-|---|---|---|
-| Value representation | Q-Table | Neural Network |
-| Suitable state space | Small/discrete | Larger/complex |
-| Experience Replay | No | Yes |
-| Target Network | No | Yes |
-| Neural Network | No | Yes |
-| Exploration | Epsilon-Greedy | Epsilon-Greedy |
-| Implemented in DroneRoute RL | Yes | Yes |
+The React frontend provides a visual interface for demonstrating the RL system.
 
-Using both algorithms provides a useful comparison between traditional tabular reinforcement learning and deep reinforcement learning.
+Users can:
 
----
-
-## Interactive Dashboard
-
-The React dashboard provides:
-
-- Scenario selection
-- Q-Learning execution
-- DQN execution
-- Animated drone movement
-- Learned route visualization
-- Obstacles and restricted-zone visualization
-- Battery usage
-- Route steps
-- Total reward
-- Delivery success status
-- Training statistics
-- Reward and penalty exploration demonstration
-
-The exploration demonstration visually explains how the drone receives feedback for normal movement, obstacle collisions, boundary violations, and successful delivery.
+- Select Standard, Urban, or Low-Battery delivery.
+- Generate new obstacle configurations.
+- Choose Q-Learning or DQN.
+- Run the selected RL agent.
+- Watch the drone move through the grid.
+- Observe obstacles.
+- View the selected actions.
+- Monitor battery usage.
+- View total reward.
+- Compare actual steps against shortest possible steps.
+- View route efficiency.
+- Check whether the destination was reached.
+- View training statistics.
 
 ---
 
-## Technology Stack
+# Reward & Safety Demonstration
 
-### Reinforcement Learning / Backend
+The frontend also contains a separate educational demonstration for explaining reinforcement-learning feedback.
 
-- Python
-- NumPy
-- PyTorch
-- FastAPI
-- Uvicorn
+It demonstrates:
 
-### Visualization and Experimentation
+```text
+Normal Movement       → -1
+Boundary Violation    → -10
+Obstacle Collision    → -50
+Successful Delivery   → +100
+```
 
-- Matplotlib
-- Jupyter Notebook
+The collision demonstration intentionally places the drone beside an obstacle and attempts to move into it.
 
-### Frontend
+For example:
 
-- React
-- Vite
-- JavaScript
-- CSS
+```text
+Drone Position:     (1,0)
+Obstacle Position:  (1,1)
+Action:             RIGHT
+```
 
-### Deployment
+Result:
 
-- Vercel — Frontend
-- Render — FastAPI backend
+```text
+Reward:          -50
+Mission Status:  Terminated
+```
 
-### Version Control
+This demonstration is separate from trained Q-Learning and DQN policies.
 
-- Git
-- GitHub
+Its purpose is to clearly show how rewards and penalties provide feedback to an RL agent.
 
 ---
 
-## Project Structure
+# Technology Stack
+
+## Reinforcement Learning
+
+```text
+Python
+NumPy
+PyTorch
+```
+
+## Backend
+
+```text
+FastAPI
+Uvicorn
+```
+
+## Frontend
+
+```text
+React
+Vite
+JavaScript
+CSS
+```
+
+## Experimentation and Visualization
+
+```text
+Jupyter Notebook
+Matplotlib
+```
+
+## Deployment
+
+```text
+Frontend → Vercel
+Backend  → Render
+```
+
+## Version Control
+
+```text
+Git
+GitHub
+```
+
+---
+
+# Project Structure
 
 ```text
 DroneRoute-RL/
@@ -368,13 +732,11 @@ DroneRoute-RL/
 │   └── drone_env.py
 │
 ├── frontend/
-│   ├── src/
-│   │   ├── App.jsx
-│   │   └── App.css
-│   └── ...
+│   └── src/
+│       ├── App.jsx
+│       └── App.css
 │
 ├── notebooks/
-│   └── rl_experiments.ipynb
 │
 ├── training/
 │   ├── train.py
@@ -391,38 +753,38 @@ DroneRoute-RL/
 
 ---
 
-## Running the Project Locally
+# Running the Project Locally
 
-### 1. Clone the Repository
+## 1. Clone the Repository
 
 ```bash
 git clone https://github.com/karamchandsuresh/DroneRoute-RL.git
 cd DroneRoute-RL
 ```
 
-### 2. Create a Virtual Environment
+## 2. Create Virtual Environment
 
 ```bash
 python -m venv .venv
 ```
 
-### 3. Activate the Environment
+## 3. Activate Virtual Environment
 
-Windows PowerShell:
+### Windows PowerShell
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
 ```
 
-### 4. Install Dependencies
+## 4. Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 5. Start the Backend
+## 5. Start Backend
 
-From the project root:
+Run from the project root:
 
 ```bash
 python -m uvicorn backend.app:app --reload
@@ -434,7 +796,13 @@ Backend:
 http://127.0.0.1:8000
 ```
 
-### 6. Start the Frontend
+FastAPI documentation:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+## 6. Start Frontend
 
 Open another terminal:
 
@@ -452,99 +820,180 @@ http://localhost:5173
 
 ---
 
-## Deployment
+# Main API Endpoints
 
-The application is deployed using separate frontend and backend services.
+```text
+GET /
+```
 
-### Frontend
+API health check.
 
-Deployed on Vercel:
+```text
+GET /scenarios
+```
 
+Returns available delivery scenarios.
+
+```text
+GET /environment
+```
+
+Generates information for the selected environment.
+
+```text
+GET /route/q-learning
+```
+
+Trains and evaluates Q-Learning.
+
+```text
+GET /route/dqn
+```
+
+Trains and evaluates DQN.
+
+```text
+GET /demo/exploration
+```
+
+Provides information for the Reward & Safety demonstration.
+
+---
+
+# Deployment
+
+The project uses separate frontend and backend deployments.
+
+### Frontend — Vercel
+
+```text
 https://drone-route-rl.vercel.app
+```
 
-### Backend
+### Backend — Render
 
-FastAPI deployed on Render:
-
+```text
 https://droneroute-rl-api.onrender.com
+```
 
-The frontend communicates with the deployed backend through the `VITE_API_URL` environment variable.
+The frontend communicates with the backend through the configured:
 
----
+```text
+VITE_API_URL
+```
 
-## Limitations
-
-The current version is a controlled simulation and has several limitations:
-
-- Uses a small 5 × 5 grid.
-- Obstacles are static.
-- Weather and wind are not simulated.
-- Battery consumption is simplified.
-- No GPS or real-world map integration.
-- No physical drone hardware integration.
-- Single-drone and single-delivery environment.
-- Training occurs in simulation.
-
-These limitations define opportunities for future development rather than representing a production-ready autonomous drone system.
+environment variable.
 
 ---
 
-## Future Scope
+# Limitations
 
-DroneRoute RL can be extended with:
+DroneRoute RL is a **simulation-based academic prototype** rather than a production drone-control system.
 
-- Larger and dynamic environments
+Current limitations include:
+
+- Small 5 × 5 grid.
+- Obstacles change between environments but do not move during an episode.
+- Simplified battery consumption.
+- No wind or weather conditions.
+- No payload-dependent battery consumption.
+- No altitude or 3D navigation.
+- No GPS or real-world maps.
+- No computer-vision obstacle detection.
+- No physical drone integration.
+- Single-drone environment.
+- Single delivery destination.
+- Training occurs entirely in simulation.
+- RL success can vary across randomly generated environments.
+
+---
+
+# Future Scope
+
+Possible future improvements include:
+
+- Larger environments
 - Moving obstacles
-- Real-world map integration
-- GPS-based navigation
-- Weather and wind conditions
-- Variable battery consumption
+- Real-time route replanning
+- Real-world maps
+- GPS integration
+- 3D navigation
+- Altitude control
+- Weather and wind simulation
+- Payload-aware battery consumption
 - Charging stations
-- Emergency landing decisions
 - Multiple delivery destinations
 - Multi-drone coordination
-- Real-time route replanning
-- Advanced Deep RL algorithms
-- Integration with drone simulators
+- Computer-vision obstacle detection
+- Double DQN
+- Dueling DQN
+- Prioritized Experience Replay
+- PPO and other advanced RL algorithms
+- Drone simulator integration
 - Physical drone testing
 
 ---
 
-## Key Learning Outcomes
+# Real-World Relevance
 
-This project demonstrates practical implementation of:
+A real autonomous delivery drone must make sequential decisions while considering:
+
+- destination,
+- obstacles,
+- restricted areas,
+- energy availability,
+- route efficiency,
+- and safety.
+
+DroneRoute RL simplifies these challenges into a controlled simulation where reinforcement-learning techniques can be implemented, compared, tested, and visualized.
+
+The project provides a foundation for understanding how autonomous agents can learn navigation behaviour before extending the system toward more complex real-world drone applications.
+
+---
+
+# Key Learning Outcomes
+
+The project demonstrates practical understanding of:
 
 - Reinforcement Learning
-- Markov Decision Process concepts
+- Agent-environment interaction
 - States, actions, rewards and policies
 - Q-Learning
+- Bellman-based Q-value updates
 - Q-Tables
-- Bellman-based value updates
 - Exploration vs exploitation
 - Epsilon-greedy learning
 - Deep Q-Networks
+- Neural-network Q-value approximation
 - Experience replay
 - Target networks
 - Reward shaping
-- Battery-aware state representation
-- RL training and evaluation
-- Full-stack integration
-- API development
+- Battery-aware navigation
+- Obstacle-aware state representation
+- Dynamic environment generation
+- Route evaluation
+- Safety-oriented reward design
+- FastAPI
+- React
+- Full-stack AI integration
+- Git and GitHub
 - Cloud deployment
 
 ---
 
-## Conclusion
+# Conclusion
 
-DroneRoute RL demonstrates how reinforcement learning can be applied to autonomous drone delivery route decision-making.
+DroneRoute RL demonstrates how reinforcement learning can be applied to autonomous drone delivery route optimization in a simulated dynamic environment.
 
-By comparing Q-Learning and DQN across standard, urban restricted-zone, and low-battery scenarios, the project demonstrates how an agent can learn efficient navigation policies through environmental interaction and reward-based feedback.
+The project compares **Q-Learning and Deep Q-Networks** while incorporating dynamic obstacle configurations, battery constraints, obstacle awareness, route efficiency, and safety-oriented penalties.
 
-The project serves as a simulation-based foundation that can be extended toward more realistic autonomous delivery and intelligent route-planning systems.
+Instead of learning only one fixed obstacle map, the agents train across changing environments and use reward-based feedback to learn navigation behaviour.
+
+The project provides a foundation that can later be extended toward larger environments, moving obstacles, advanced reinforcement-learning algorithms, real-world maps, and physical drone systems.
 
 ---
 
-## Links
+## Project Links
 
 **Live Demo:**  
 https://drone-route-rl.vercel.app
